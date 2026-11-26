@@ -757,6 +757,22 @@ function forestLine(y, col, R, size, emerg, bottom) {
 }
 function cloud(x, y, s, col) { [[0, 0, 1], [-.9, .18, .72], [.95, .22, .76], [-.4, -.35, .62], [.45, -.3, .66], [1.6, .32, .5], [-1.5, .3, .48]].forEach(c => ell(x + c[0] * 28 * s, y + c[1] * 20 * s, 30 * s * c[2], 18 * s * c[2], col)); }
 function sunDisc(x, y, r, col, glow) { for (let i = 5; i >= 1; i--) ell(x, y, r * (1 + i * .55), r * (1 + i * .55), glow); ell(x, y, r, r, col); }
+// Alto-style sky: multi-stop gradient, big soft sun glow, smooth silhouette hills, streak clouds
+function altoSky(stops, y1, sx, sy, sr, sunCol, glow) {
+  const g = ctx.createLinearGradient(0, 0, 0, y1); stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c)); ctx.fillStyle = g; ctx.fillRect(-PAD, 0, W + 2 * PAD, y1);
+  ctx.save(); ctx.globalCompositeOperation = 'screen';
+  const h = ctx.createRadialGradient(sx, sy, sr * .3, sx, sy, sr * 10); h.addColorStop(0, glow + '.6)'); h.addColorStop(.3, glow + '.22)'); h.addColorStop(1, glow + '0)');
+  ctx.fillStyle = h; ctx.fillRect(-PAD, 0, W + 2 * PAD, y1); ctx.restore();
+  const d = ctx.createRadialGradient(sx, sy, sr * .75, sx, sy, sr * 1.25); d.addColorStop(0, sunCol); d.addColorStop(.75, sunCol); d.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = d; ctx.beginPath(); ctx.arc(sx, sy, sr * 1.25, 0, 7); ctx.fill();
+}
+function altoHills(y, amp, col, seed) {
+  ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(-PAD - 20, H);
+  for (let x = -PAD - 20; x <= W + PAD + 20; x += 8) ctx.lineTo(x, y + Math.sin(x * .006 + seed) * amp + Math.sin(x * .0155 + seed * 2.1) * amp * .5 + Math.sin(x * .031 + seed * 3.3) * amp * .12);
+  ctx.lineTo(W + PAD + 20, H); ctx.closePath(); ctx.fill();
+}
+function streak(x, y, w, col) { ell(x, y, w, w * .045, col); ell(x + w * .35, y - w * .035, w * .5, w * .03, col); ell(x - w * .4, y + w * .03, w * .45, w * .028, col); }
+const SUN = { river: [790, 238, 'rgba(255,214,150,'], mangrove: [300, 130, 'rgba(255,250,225,'], pedada: [840, 70, 'rgba(255,246,205,'], estuary: [160, 60, 'rgba(255,255,240,'] };
 function leafBlob(cx, cy, r, pal, R) {
   ell(cx + r * .1, cy + r * .14, r * .98, r * .8, pal[0], (R() - .5) * .5);
   ell(cx - r * .06, cy - r * .06, r * .8, r * .64, pal[1], (R() - .5) * .5);
@@ -1020,9 +1036,9 @@ function getLayers(L) {
   const A = L.canopy[0], B = L.canopy[1]; let far, main, fg; const FO = buildForest(L, R);
   if (L.kind === 'river') {
     far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      skyG('#E9A06A', '#F9E2BE', 0, 360); sunDisc(790, 238, 34, '#FFF0C4', 'rgba(255,226,170,.10)');
-      cloud(180, 90, 1.2, 'rgba(255,214,190,.55)'); cloud(520, 60, .9, 'rgba(255,220,200,.45)'); cloud(860, 120, .8, 'rgba(255,226,205,.5)');
-      ridge(268, 18, '#B2B6A2', 2); ridge(292, 12, '#93A896', 4); forestLine(318, '#6D8C74', R, 22, true); forestLine(336, '#4E6E56', R, 28, true); });
+      altoSky(['#6F5C92', '#C97A78', '#F3AE78', '#FCDDA4'], 360, 790, 238, 34, '#FFF4D2', 'rgba(255,214,150,');
+      streak(200, 84, 170, 'rgba(255,206,184,.5)'); streak(540, 58, 130, 'rgba(255,214,196,.42)'); streak(880, 124, 120, 'rgba(255,222,200,.5)'); streak(420, 168, 90, 'rgba(255,200,170,.35)');
+      altoHills(262, 18, '#B58A92', 2); altoHills(290, 13, '#946F78', 4.2); forestLine(318, '#6D8C74', R, 22, true); forestLine(336, '#4E6E56', R, 28, true); });
     main = mkLayer(W, H, () => {
       ctx.fillStyle = lg(0, 342, 0, 406, ['#7E6849', '#5E4B35']); ctx.fillRect(0, 342, W, 66);
       ctx.fillStyle = '#6E8B47'; ctx.beginPath(); ctx.moveTo(0, 356); for (let x = 0; x <= W; x += 6) ctx.lineTo(x, 343 + Math.sin(x * .2) * 2.5 + R() * 3); ctx.lineTo(W, 358); ctx.closePath(); ctx.fill();
@@ -1037,7 +1053,7 @@ function getLayers(L) {
       leafBlob(-20, -10, 60, ['#1F3A24', '#2C4F30', '#4C7A48'], R); leafBlob(W + 20, -20, 50, ['#1F3A24', '#2C4F30', '#4C7A48'], R); });
   } else if (L.kind === 'mangrove') {
     far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      skyG('#C9DED6', '#EEF2E7', 0, 350); sunDisc(300, 130, 26, 'rgba(255,252,236,.9)', 'rgba(255,255,240,.10)');
+      altoSky(['#A5C5C4', '#D0E3DB', '#EEF2E7'], 350, 300, 130, 26, 'rgba(255,252,236,.95)', 'rgba(255,250,225,');
       cloud(700, 80, 1.1, 'rgba(255,255,255,.55)'); forestLine(310, '#A8BFB2', R, 20, false); forestLine(330, '#86A595', R, 24, false); forestLine(346, '#6B8C78', R, 26, false); });
     main = mkLayer(W, H, () => {
       ctx.fillStyle = lg(0, 346, 0, H, ['#7C8A66', '#5E6C48', '#47552F']); ctx.fillRect(0, 346, W, H - 346);
@@ -1050,9 +1066,9 @@ function getLayers(L) {
       frond(W + 30, H + 10, 200, -2.4, '#4C7A3C', '#2F5A2C', R); frond(W + 10, H + 30, 220, -2.05, '#5A8A46', '#35632F', R); });
   } else if (L.kind === 'pedada') {
     far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      skyG('#B6E0EC', '#F3F4E0', 0, 356); sunDisc(840, 70, 24, '#FFFBE6', 'rgba(255,250,220,.12)');
+      altoSky(['#7FBFD9', '#BFE3E6', '#F3F4E0'], 356, 840, 70, 24, '#FFFBE6', 'rgba(255,246,205,');
       cloud(220, 70, 1.1, 'rgba(255,255,255,.8)'); cloud(560, 110, .8, 'rgba(255,255,255,.7)');
-      ridge(286, 16, '#A6C6B0', 5); ridge(306, 10, '#86B08A', 7); forestLine(330, '#5E8E62', R, 26, true); forestLine(346, '#4A7A50', R, 28, true); });
+      altoHills(288, 16, '#A9C9BE', 5); altoHills(310, 10, '#86B29A', 7.3); forestLine(330, '#5E8E62', R, 26, true); forestLine(346, '#4A7A50', R, 28, true); });
     main = mkLayer(W, H, () => {
       ctx.fillStyle = lg(0, 350, 0, 414, ['#86704C', '#664F36']); ctx.fillRect(0, 350, W, 66);
       ctx.fillStyle = '#7AAA52'; ctx.beginPath(); ctx.moveTo(0, 360); for (let x = 0; x <= W; x += 6) ctx.lineTo(x, 349 + Math.sin(x * .15) * 2 + R() * 3); ctx.lineTo(W, 362); ctx.closePath(); ctx.fill();
@@ -1065,7 +1081,7 @@ function getLayers(L) {
       leafBlob(W + 10, -14, 56, ['#244A2A', '#356A3A', '#6EA45E'], R); });
   } else {
     far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      skyG('#7EC2E4', '#E6F4F8', 0, 302); sunDisc(160, 60, 22, '#FFFDF0', 'rgba(255,255,240,.12)');
+      altoSky(['#58ACDC', '#A6D7EA', '#E6F4F8'], 302, 160, 60, 22, '#FFFDF0', 'rgba(255,255,240,');
       cloud(420, 90, 1.2, 'rgba(255,255,255,.9)'); cloud(780, 60, .9, 'rgba(255,255,255,.85)'); cloud(640, 150, .6, 'rgba(255,255,255,.7)');
       ctx.fillStyle = '#7FA6AF'; ctx.beginPath(); ctx.moveTo(40, 302); ctx.quadraticCurveTo(120, 278, 220, 302); ctx.closePath(); ctx.fill();
       ctx.fillStyle = lg(0, 300, 0, 366, ['#5BA0B2', '#4A8EA3']); ctx.fillRect(-PAD, 300, W + 2 * PAD, 66); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(-PAD, 300, W + 2 * PAD, 1.5);
@@ -1114,6 +1130,8 @@ function drawOverlay(L, t, ev) {
     for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(600 + i * 70, 0); ctx.lineTo(650 + i * 70, 0); ctx.lineTo(330 + i * 95, H); ctx.lineTo(250 + i * 95, H); ctx.closePath(); ctx.fill(); }
   }
   if (L.kind === 'estuary' && ev > 0) { for (let i = 0; i < 22; i++) { const x = (i * 47 + t * 30) % W; const tw = .5 + .5 * Math.sin(t * 6 + i); ell(x, 306 + (i % 6) * 9, 3 * tw, 1.1, 'rgba(255,255,255,' + (0.85 * ev) + ')'); } }
+  { const su = SUN[L.kind]; const pul = .85 + .15 * Math.sin(t * .5); ctx.save(); ctx.globalCompositeOperation = 'screen';
+    const g = ctx.createRadialGradient(su[0], su[1], 10, su[0], su[1], 420); g.addColorStop(0, su[2] + (.16 * pul) + ')'); g.addColorStop(1, su[2] + '0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore(); }
   ctx.drawImage(getLayers(L).vig, 0, 0, W, H);
 }
 // ===== Ambient particles =====
