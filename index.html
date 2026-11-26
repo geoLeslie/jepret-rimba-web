@@ -186,6 +186,56 @@ const SPOTS = [
   { id: 'pedada', name: 'Pohon Pedada', time: 'Pagi', layout: 'pedada', pin: { x: 430, y: 186 }, base: 0.25, fauna: ['kera', 'pekakak', 'kuntul', 'tembakul'], clue: 'daun', threat: 'tunggul', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Pohon pedada berdaun lebat di tepi air.' },
   { id: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 596, y: 446 }, base: 0.08, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: { name: 'Air pasang', sign: 'Air laut mulai pasang...' }, desc: 'Dataran lumpur luas tempat sungai bertemu laut.' }
 ];
+// Spots per island. Kalimantan (the Bekantan's home) uses SPOTS above. Every other island
+// reuses the same four scene layouts and existing animals, but has its own spots, pins,
+// names and fauna, so a wrong island does not look like a copy of Kalimantan.
+// Clues are only for the right island (startSession ignores them elsewhere), so wrong
+// islands have clue: null. Pins are in 960x540 screen space; keep x < 630 (info panel).
+const EV = {
+  golden: { name: 'Golden hour', sign: 'Cahaya mulai keemasan...' },
+  kabut: { name: 'Kabut tersibak', sign: 'Kabut mulai menipis...' },
+  pasang: { name: 'Air pasang', sign: 'Air laut mulai pasang...' }
+};
+const ISLANDSPOTS = {
+  kalimantan: SPOTS,
+  sumatra: [
+    { id: 'sum_gambut', icon: 'sungai', name: 'Rawa Gambut', time: 'Sore', layout: 'river', pin: { x: 186, y: 168 }, base: 0, fauna: ['pekakak', 'biawak', 'kera', 'kuntul'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai hitam berair gambut di tengah hutan rawa.' },
+    { id: 'sum_bakau', icon: 'bakau', name: 'Bakau Pantai Timur', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 150 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'pekakak'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Sabuk bakau panjang di pesisir timur yang landai.' },
+    { id: 'sum_muara', icon: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 560, y: 336 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Sungai gambut bertemu laut, airnya cokelat kehitaman.' }
+  ],
+  jawa: [
+    { id: 'jaw_bakau', icon: 'bakau', name: 'Bakau Pantura', time: 'Pagi', layout: 'mangrove', pin: { x: 216, y: 186 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'biawak'], clue: null, threat: 'sampah', event: EV.kabut, desc: 'Sisa hutan bakau di pantai utara, diapit tambak dan sawah.' },
+    { id: 'jaw_muara', icon: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 438, y: 174 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Muara sungai yang ramai perahu nelayan.' }
+  ],
+  sulawesi: [
+    { id: 'sul_sungai', icon: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 186, y: 204 }, base: 0, fauna: ['kuntul', 'tembakul', 'kepiting', 'daralaut'], clue: null, threat: 'sampah', event: EV.golden, desc: 'Sungai jernih turun dari perbukitan menuju teluk.' },
+    { id: 'sul_teluk', icon: 'bakau', name: 'Teluk Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 390, y: 336 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Bakau di sudut teluk yang tenang.' },
+    { id: 'sul_pantai', icon: 'muara', name: 'Pantai', time: 'Siang', layout: 'estuary', pin: { x: 576, y: 426 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Pantai berlumpur di mulut teluk.' }
+  ],
+  nusa: [
+    { id: 'nus_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 216, y: 192 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Bakau kecil di pantai utara pulau yang kering.' },
+    { id: 'nus_pantai', icon: 'muara', name: 'Pantai Selatan', time: 'Siang', layout: 'estuary', pin: { x: 450, y: 372 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Pantai terbuka menghadap laut lepas, dekat sabana.' }
+  ],
+  maluku: [
+    { id: 'mal_pantai', icon: 'muara', name: 'Pantai', time: 'Siang', layout: 'estuary', pin: { x: 396, y: 252 }, base: 0, fauna: ['daralaut', 'kuntul', 'tembakul', 'kepiting'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Pantai pulau kecil berair jernih.' },
+    { id: 'mal_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 156, y: 366 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Bakau di teluk kecil antarpulau.' }
+  ],
+  papua: [
+    { id: 'pap_sungai', icon: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 174, y: 132 }, base: 0, fauna: ['kuntul', 'tembakul', 'kepiting', 'daralaut'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai besar berkelok di dataran rendah.' },
+    { id: 'pap_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 276 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Hutan bakau yang sangat luas di delta sungai.' },
+    { id: 'pap_muara', icon: 'muara', name: 'Muara Sungai', time: 'Siang', layout: 'estuary', pin: { x: 552, y: 444 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Delta lumpur tempat sungai besar bertemu laut.' }
+  ]
+};
+function regionSpots() { return ISLANDSPOTS[G.region] || SPOTS; }
+// What villagers say at the end of day 1 on a wrong island (Bekantan mission).
+const VILLAGER = {
+  sumatra: 'Di rawa gambut sini banyak satwa, tapi monyet hidung panjang? Belum pernah ada yang lihat.',
+  jawa: 'Bakau di sini tinggal sedikit. Monyet hidung panjang tidak pernah ada di Jawa.',
+  sulawesi: 'Monyet di Sulawesi hitam dan berjambul, bukan berhidung panjang.',
+  nusa: 'Pulau kami kering dan banyak sabana. Belum pernah ada monyet hidung panjang di sini.',
+  maluku: 'Di pulau-pulau kecil ini tidak ada monyet hidung panjang.',
+  papua: 'Bakau kami luas, tapi monyet hidung panjang tidak hidup di Papua.'
+};
 const MISSIONS = [
   { id: 'bekantan', name: 'Bekantan', latin: 'Nasalis larvatus', region: 'kalimantan', open: true,
     brief: 'Desa butuh foto Bekantan untuk data konservasi. Monyet berhidung panjang ini hidup di hutan bakau dan tepi sungai, di pulau yang berbagi daratan dengan Malaysia dan Brunei.' },
@@ -1018,21 +1068,79 @@ const TREESPEC = {
   estuary: { bg: [[-30, 390, 268, 'bakau', .7], [345, 370, 284, 'kelapa', .58], [930, 382, 262, 'kelapa', .75], [470, 376, 376, 'nipah', .55]], main: [['bakau', .85], ['apiapi', .85]] }
 };
 const HAZE = { river: '#F0CDA0', mangrove: '#DCE5DC', pedada: '#D6E7DE', estuary: '#D3E8F0' };
+// Tree look per island. Kalimantan is not listed, so it keeps the original scenes.
+// For each scene kind: main = the two big trees the animals walk on ([species, size]),
+// bg = background trees (positions are generated from the island seed).
+// dx moves the two main trees left/right; haze tints the background (null = default).
+// Main trees must be a branching species (not kelapa or nipah).
+const ISLANDLOOK = {
+  sumatra: { seed: 101, dx: [-30, 40], haze: '#DCE3C8', trees: {
+    river: { main: [['meranti', 1.05], ['meranti', .9]], bg: ['meranti', 'nipah', 'ketapang', 'meranti', 'nipah'] },
+    mangrove: { main: [['apiapi', 1], ['bakau', 1.05]], bg: ['nipah', 'bakau', 'nipah', 'apiapi', 'nipah'] },
+    estuary: { main: [['apiapi', .8], ['bakau', .9]], bg: ['nipah', 'kelapa', 'nipah', 'bakau'] } } },
+  jawa: { seed: 202, dx: [40, -50], haze: '#E6E2CC', trees: {
+    mangrove: { main: [['apiapi', .85], ['apiapi', .8]], bg: ['kelapa', 'kelapa', 'ketapang'] },
+    estuary: { main: [['ketapang', .8], ['apiapi', .75]], bg: ['kelapa', 'kelapa', 'kelapa'] } } },
+  sulawesi: { seed: 303, dx: [-60, 20], haze: null, trees: {
+    river: { main: [['ketapang', 1], ['beringin', .95]], bg: ['kelapa', 'meranti', 'kelapa', 'ketapang'] },
+    mangrove: { main: [['bakau', .95], ['bakau', 1]], bg: ['nipah', 'apiapi', 'kelapa', 'nipah'] },
+    estuary: { main: [['apiapi', .8], ['ketapang', .85]], bg: ['kelapa', 'kelapa', 'bakau'] } } },
+  nusa: { seed: 404, dx: [70, -30], haze: '#EED9B2', trees: {
+    mangrove: { main: [['apiapi', .8], ['apiapi', .75]], bg: ['kelapa', 'kelapa'] },
+    estuary: { main: [['ketapang', .75], ['apiapi', .7]], bg: ['kelapa', 'kelapa'] } } },
+  maluku: { seed: 505, dx: [-20, 60], haze: '#CFE6EC', trees: {
+    mangrove: { main: [['bakau', 1], ['apiapi', .9]], bg: ['kelapa', 'nipah', 'bakau', 'kelapa'] },
+    estuary: { main: [['ketapang', .85], ['bakau', .85]], bg: ['kelapa', 'kelapa', 'kelapa', 'nipah'] } } },
+  papua: { seed: 606, dx: [20, -40], haze: '#CDE2D2', trees: {
+    river: { main: [['beringin', 1.05], ['ketapang', 1]], bg: ['nipah', 'meranti', 'nipah', 'beringin', 'nipah'] },
+    mangrove: { main: [['bakau', 1.1], ['bakau', 1.05]], bg: ['nipah', 'bakau', 'nipah', 'apiapi', 'bakau', 'nipah'] },
+    estuary: { main: [['bakau', .9], ['bakau', .95]], bg: ['nipah', 'nipah', 'bakau', 'nipah'] } } }
+};
+const LAYOUT_VARIANTS = {};
+// The scene layout for a spot on the current island (a variant of LAYOUTS for other islands).
+function layoutFor(spot) {
+  const base = LAYOUTS[spot.layout], look = ISLANDLOOK[G.region];
+  if (!look || !look.trees[base.kind]) return base;
+  const key = base.kind + ':' + G.region;
+  if (LAYOUT_VARIANTS[key]) return LAYOUT_VARIANTS[key];
+  const t = look.trees[base.kind];
+  const L = Object.assign({}, base, { key, island: G.region });
+  L.canopy = base.canopy.map((c, i) => ({ x: clamp(c.x + look.dx[i], 170, 760), y: c.y, sc: t.main[i][1] }));
+  const A = L.canopy[0], B = L.canopy[1];
+  L.perches = [A.x - 85 * A.sc, A.x + 85 * A.sc, B.x - 85 * B.sc, B.x + 85 * B.sc].map(x => ({ x, y: branchY(L, x) }));
+  return (LAYOUT_VARIANTS[key] = L);
+}
+function hazeFor(L) { return (L.island && ISLANDLOOK[L.island].haze) || HAZE[L.kind]; }
+// Tree list for a layout: the original for Kalimantan, generated from the island look otherwise.
+function treeSpecFor(L) {
+  if (!L.island) return TREESPEC[L.kind];
+  if (L.spec) return L.spec;
+  const look = ISLANDLOOK[L.island], t = look.trees[L.kind], orig = TREESPEC[L.kind];
+  const R = mulberry(look.seed * 7 + L.kind.length * 13);
+  const tall = orig.bg.find(b => b[3] !== 'nipah'), low = orig.bg.find(b => b[3] === 'nipah') || [0, tall[1] + 6, tall[1] + 6];
+  const n = t.bg.length;
+  const bg = t.bg.map((sp, i) => {
+    const ref = sp === 'nipah' ? low : tall;
+    return [Math.round(-40 + (i + .15 + R() * .7) * (1040 / n)), ref[1] + Math.round((R() - .5) * 6), ref[2] + Math.round((R() - .5) * 24), sp, +(.4 + R() * .32).toFixed(2)];
+  });
+  return (L.spec = { bg, main: t.main });
+}
 function tint(c, col, a) { const g = c.getContext('2d'); g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-atop'; g.globalAlpha = a; g.fillStyle = col; g.fillRect(0, 0, c.width, c.height); g.restore(); return c; }
 function blurred(c, px) { const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; const g = o.getContext('2d'); try { g.filter = 'blur(' + (px * S) + 'px)'; } catch (e) {} g.drawImage(c, 0, 0); return o; }
 function buildForest(L, R) {
-  const spec = TREESPEC[L.kind]; const bgCrowns = [], mainCrowns = [];
+  const spec = treeSpecFor(L); const bgCrowns = [], mainCrowns = [];
   let bgBase = mkLayer(W, H, () => { for (const b of spec.bg) bgCrowns.push(buildTree({ x: b[0], base: b[1], by: b[2], sp: b[3], sc: b[4], main: false }, R)); });
   // aerial perspective: background trees take the sky's haze and a slight blur
-  const hz = HAZE[L.kind]; tint(bgBase, hz, .4); bgBase = blurred(bgBase, .6);
+  const hz = hazeFor(L); tint(bgBase, hz, .4); bgBase = blurred(bgBase, .6);
   for (const cr of bgCrowns) { tint(cr.c, hz, .4); cr.c = blurred(cr.c, .6); cr.hangers = []; }
   const mainBase = mkLayer(W, H, () => { L.canopy.forEach((c, i) => mainCrowns.push(buildTree({ x: c.x, base: L.base, by: c.y, sp: spec.main[i][0], sc: spec.main[i][1], main: true, L, ci: i }, R))); entryBranches(L, R); });
   const full = mkLayer(W, H, () => { ctx.drawImage(bgBase, 0, 0, W, H); drawCrowns(bgCrowns, 0); ctx.drawImage(mainBase, 0, 0, W, H); drawCrowns(mainCrowns, 0); });
   return { bgBase, mainBase, full, bgCrowns, mainCrowns };
 }
 function getLayers(L) {
-  if (LAYER_CACHE[L.kind]) return LAYER_CACHE[L.kind];
-  const R = mulberry({ river: 11, mangrove: 23, pedada: 37, estuary: 41 }[L.kind]);
+  const ck = L.key || L.kind;
+  if (LAYER_CACHE[ck]) return LAYER_CACHE[ck];
+  const R = mulberry({ river: 11, mangrove: 23, pedada: 37, estuary: 41 }[L.kind] + (L.island ? ISLANDLOOK[L.island].seed : 0));
   const A = L.canopy[0], B = L.canopy[1]; let far, main, fg; const FO = buildForest(L, R);
   if (L.kind === 'river') {
     far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
@@ -1095,10 +1203,10 @@ function getLayers(L) {
     fg = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
       frond(-30, H + 10, 190, -0.8, '#5C8A46', '#35632F', R); frond(-10, H + 34, 210, -1.1, '#6A9A50', '#3E6E36', R); frond(W + 30, H + 20, 200, -2.3, '#5C8A46', '#35632F', R); });
   }
-  { const hy = HORIZON[L.kind]; const hz = mkLayer(W + 2 * PAD, H, () => { ctx.drawImage(far, 0, 0, W + 2 * PAD, H); const g = ctx.createLinearGradient(0, hy - 90, 0, hy + 10); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, HAZE[L.kind] + 'AA'); ctx.fillStyle = g; ctx.fillRect(0, hy - 90, W + 2 * PAD, 100); }); far = blurred(hz, 1); }
+  { const hy = HORIZON[L.kind]; const hz = mkLayer(W + 2 * PAD, H, () => { ctx.drawImage(far, 0, 0, W + 2 * PAD, H); const g = ctx.createLinearGradient(0, hy - 90, 0, hy + 10); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, hazeFor(L) + 'AA'); ctx.fillStyle = g; ctx.fillRect(0, hy - 90, W + 2 * PAD, 100); }); far = blurred(hz, 1); }
   tint(fg, '#0C1C10', .32); fg = blurred(fg, 2.2);
   const vig = mkLayer(W, H, () => { const g = ctx.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, H * .95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(10,15,10,.38)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); });
-  return (LAYER_CACHE[L.kind] = { far, main, fg, vig, FO });
+  return (LAYER_CACHE[ck] = { far, main, fg, vig, FO });
 }
 const SHIMMER = { river: [[408, 540]], mangrove: [[350, 368], [410, 540]], pedada: [[418, 540]], estuary: [[304, 362]] };
 const HORIZON = { river: 352, mangrove: 348, pedada: 352, estuary: 300 };
@@ -1213,7 +1321,7 @@ const FW = 230, FH = 156;
 function frameRect() { return { x: clamp(mouse.x - FW / 2, 0, W - FW), y: clamp(mouse.y - FH / 2, 0, H - FH), w: FW, h: FH }; }
 function toast(msg, col) { if (SS) SS.toasts.push({ msg, col: col || '#FFFFFF', t: 0 }); }
 function startSession(spot) {
-  const L = LAYOUTS[spot.layout];
+  const L = layoutFor(spot);
   const ok = G.regionCorrect;
   let p = ok ? Math.min(0.9, spot.base + (G.bonus[spot.id] || 0) + (G.reported[spot.id] ? 0.05 : 0)) : 0;
   const guarantee = ok && !G.appearedEver && G.day >= 4;
@@ -1356,6 +1464,41 @@ const TRIB = [[104, 106], [118, 88], [134, 70], [152, 56], [176, 42], [200, 30]]
 function segDist(px, py, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1]; const t = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / (dx * dx + dy * dy), 0, 1); return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy); }
 function lineDist(px, py, L) { let d = 1e9; for (let i = 1; i < L.length; i++) d = Math.min(d, segDist(px, py, L[i - 1], L[i])); return d; }
 function coastX(y) { return y >= 120 ? 205 - (y - 150) * 0.9 : 232 + (120 - y) * 1.4; }
+// Spot-map shape per island. coast(x, y) > 0 is land (distance to the coast in cells).
+// river/trib are polylines; rw = river width; mangW = mangrove belt width from the coast;
+// riverMang = where mangroves also grow along the river; peat = noise threshold for peat
+// swamp (lower = more); fields: 'wet' (rice fields) or 'dry' (savanna) instead of forest.
+const ISLANDMAP = {
+  kalimantan: { coast: (x, y) => coastX(y) - x, river: RIVER, trib: TRIB, rw: x => 1.6 + clamp(x / 220, 0, 1) * 2.8, mangW: 15, riverMang: x => x > 108,
+    peat: .72, peatR: 28, clearing: [168, 104], villages: [[56, 92], [64, 90], [60, 96], [178, 132], [186, 130], [182, 136], [114, 112]], path: [60, 98, 112, 116] },
+  sumatra: { coast: (x, y) => 206 - y * 0.15 - x, river: [[-2, 20], [20, 34], [44, 50], [66, 62], [92, 74], [118, 86], [144, 96], [166, 104], [186, 110], [204, 114]], trib: [],
+    rw: x => 1.4 + clamp(x / 200, 0, 1) * 2.6, mangW: 15, riverMang: x => x > 150, peat: .5, peatR: 60, clearing: [120, 128],
+    villages: [[70, 64], [76, 62], [150, 100], [156, 98], [178, 118]], path: null },
+  jawa: { coast: (x, y) => y - (48 + Math.sin(x * .05) * 4 + Math.sin(x * .013) * 6), river: [[160, 182], [156, 150], [150, 120], [154, 96], [148, 74], [146, 52], [146, 40]], trib: [],
+    rw: (x, y) => 1.4 + clamp((180 - y) / 140, 0, 1) * 2.2, mangW: 9, riverMang: null, peat: 2, peatR: 0, fields: 'wet', clearing: null,
+    villages: [[60, 80], [66, 78], [110, 90], [116, 92], [170, 70], [176, 72], [200, 110], [90, 130], [230, 84]], path: [66, 82, 146, 64] },
+  sulawesi: { coast: (x, y) => 210 - 70 * Math.exp(-(((y - 112) / 22) ** 2)) - x, river: [[-2, 60], [24, 64], [50, 70], [76, 78], [100, 92], [118, 104], [134, 110], [142, 112]], trib: [],
+    rw: x => 1.2 + clamp(x / 180, 0, 1) * 1.8, mangW: 12, riverMang: null, peat: 2, peatR: 0, clearing: null,
+    villages: [[70, 80], [76, 78], [160, 140], [166, 138]], path: null },
+  nusa: { coast: (x, y) => Math.min(y - (50 + Math.sin(x * .04) * 5), (128 + Math.sin(x * .03 + 1) * 5) - y, Math.abs(x - 250) - 5),
+    river: [[110, 128], [112, 110], [108, 92], [112, 74]], trib: [], rw: () => 1.2, mangW: 8, riverMang: null, peat: 2, peatR: 0, fields: 'dry', clearing: null,
+    villages: [[80, 72], [86, 70], [160, 114], [166, 112]], path: null },
+  maluku: { coast: (x, y) => Math.max(...[[80, 82, 52], [205, 112, 38], [175, 32, 16], [262, 60, 22]].map(([cx, cy, r]) => r - Math.hypot((x - cx) * 0.9, y - cy))),
+    river: [], trib: [], rw: () => 1, mangW: 9, riverMang: null, peat: 2, peatR: 0, clearing: null,
+    villages: [[90, 70], [96, 68], [210, 110], [62, 100]], path: null },
+  papua: { coast: (x, y) => 250 - y * 0.42 - x, river: [[-2, 24], [24, 34], [52, 48], [80, 64], [106, 82], [132, 100], [156, 118], [176, 134], [194, 150]],
+    trib: [[106, 82], [96, 108], [84, 134], [70, 160], [60, 182]], rw: x => 1.8 + clamp(x / 200, 0, 1) * 3.2, mangW: 34, riverMang: x => x > 120,
+    peat: .8, peatR: 30, clearing: null, villages: [[64, 52], [70, 50], [172, 140]], path: null }
+};
+const MAPLABELS = {
+  kalimantan: { laut: [640, 500], sungai: [260, 312], desa: [[180, 306], [546, 422]] },
+  sumatra: { laut: [640, 470], sungai: [330, 292], desa: [[222, 212], [462, 322]] },
+  jawa: { laut: [480, 96], sungai: [500, 330], desa: [[192, 262], [522, 238]] },
+  sulawesi: { laut: [520, 330], sungai: [150, 228], desa: [[226, 262], [490, 440]] },
+  nusa: { laut: [480, 484], sungai: [366, 300], desa: [[250, 236], [490, 362]] },
+  maluku: { laut: [420, 470], sungai: null, desa: [[280, 230], [188, 326]] },
+  papua: { laut: [630, 490], sungai: [300, 274], desa: [[204, 180], [520, 444]] }
+};
 const REGMAP = {};
 function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi; const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1); return lerp(lerp(a, b, u), lerp(c, d, u), v); }
 function regionMapImage(regId) {
@@ -1367,6 +1510,7 @@ function regionMapImage(regId) {
     mud: hex('#7C6648'), mudL: hex('#94795A'), mangBase: hex('#244C3C'), mang: [hex('#2F6450'), hex('#356E57'), hex('#2B5B49')], mangL: hex('#5A9A78'), mangD: hex('#1B3B2E'),
     bank: hex('#6B9A4E'), bankL: hex('#8DBA66'), forBase: hex('#1F4426'), forest: [hex('#2F5E34'), hex('#3A6E3E'), hex('#335F36'), hex('#447A44')], forL: hex('#6FA35E'), forD: hex('#1A3A20'),
     peat: hex('#5F7A3E'), peatL: hex('#738F4A'), clear: hex('#8A6B47'), clearL: hex('#A3825A'), roof: hex('#B5563A'), roofL: hex('#D67A52'), path: hex('#A58A60') };
+  const M = ISLANDMAP[regId] || ISLANDMAP.kalimantan;
   const type = new Uint8Array(GW * GH);
   const meander = (x, y) => [x, y + Math.sin(x * .17) * 2.4 + Math.sin(x * .061 + 1) * 3.2];
   const mtrib = (x, y) => [x + Math.sin(y * .21) * 2 + Math.sin(y * .08) * 2.5, y];
@@ -1374,17 +1518,19 @@ function regionMapImage(regId) {
   // pass 1: terrain types  0 sea 1 river 2 mud 3 mangrove 4 bank 5 forest 6 peat 7 clearing
   for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
     const k = y * GW + x; const h = hash2(x * 7 + seed, y * 3);
-    const dc = coastX(y) + Math.sin(y * .35) * 2 + Math.sin(y * .11 + 1) * 3 - x;
+    const dc = M.coast(x, y) + Math.sin(y * .35) * 2 + Math.sin(y * .11 + 1) * 3;
     const [mx, my] = meander(x, y), [tx, ty] = mtrib(x, y);
-    const dr = lineDist(mx, my, RIVER), dt = lineDist(tx, ty, TRIB);
-    const rw = 1.6 + clamp(x / 220, 0, 1) * 2.8, tw = 1.3;
+    const dr = lineDist(mx, my, M.river), dt = lineDist(tx, ty, M.trib);
+    const rw = M.rw(x, y), tw = 1.3;
     let t;
     if (dc < 0) t = 0; else if (dr < rw || dt < tw) t = 1; else if (dc < 3 + h * 1.5) t = 2;
-    else if (dc < 15 + Math.sin(y * .3) * 3 || (dr < 11 && x > 108)) t = 3;
+    else if (dc < M.mangW + Math.sin(y * .3) * 3 || (M.riverMang && dr < 11 && M.riverMang(x, y))) t = 3;
     else if (dr < rw + 2.4 || dt < tw + 1.8) t = 4;
     else t = 5;
-    if (t === 5 && vnoise(x * .09 + seed, y * .11) > .72 && dr < 28) t = 6;
-    if (t === 5 && Math.hypot((x - 168) / 1.6, y - 104) < 7 + Math.sin(x * .9 + y) * 1.5) t = 7;
+    if (t === 5 && vnoise(x * .09 + seed, y * .11) > M.peat && dr < M.peatR) t = 6;
+    if (t === 5 && M.fields === 'wet' && vnoise(x * .05 + seed, y * .05) < .72) t = 6;
+    if (t === 5 && M.fields === 'dry' && vnoise(x * .06 + seed, y * .06) > .42) t = 7;
+    if (t === 5 && M.clearing && Math.hypot((x - M.clearing[0]) / 1.6, y - M.clearing[1]) < 7 + Math.sin(x * .9 + y) * 1.5) t = 7;
     type[k] = t;
     let col;
     if (t === 0) { const dd = -dc; col = dd < 3 ? P.sh1 : dd < 7 ? P.sh2 : (h < .07 ? P.sea2 : P.sea); if (dd > 7 && ((x + Math.floor(y / 6) * 5) % 23 < 3) && y % 6 === 0) col = P.wave; }
@@ -1410,10 +1556,10 @@ function regionMapImage(regId) {
     }
   }
   // pass 3: villages, paths, stumps on the clearing
-  const villages = [[56, 92], [64, 90], [60, 96], [178, 132], [186, 130], [182, 136], [114, 112]];
-  for (let k = 0; k < 40; k++) { const t = k / 40; put(Math.round(lerp(60, 112, t)), Math.round(lerp(98, 116, t) + Math.sin(t * 6) * 2), P.path); }
+  const villages = M.villages, pa = M.path;
+  if (pa) for (let k = 0; k < 40; k++) { const t = k / 40; put(Math.round(lerp(pa[0], pa[2], t)), Math.round(lerp(pa[1], pa[3], t) + Math.sin(t * 6) * 2), P.path); }
   for (const v of villages) { for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 3; dx++) put(v[0] + dx, v[1] + dy, dy ? P.roof : P.roofL); put(v[0] + 1, v[1] + 2, hex('#4A3424')); }
-  for (let k = 0; k < 10; k++) { const a = hash2(k, 7) * 6.28, r = hash2(k, 9) * 6; put(Math.round(168 + Math.cos(a) * r * 1.5), Math.round(104 + Math.sin(a) * r), hex('#4E3A28')); }
+  if (M.clearing) for (let k = 0; k < 10; k++) { const a = hash2(k, 7) * 6.28, r = hash2(k, 9) * 6; put(Math.round(M.clearing[0] + Math.cos(a) * r * 1.5), Math.round(M.clearing[1] + Math.sin(a) * r), hex('#4E3A28')); }
   g.putImageData(im, 0, 0); REGMAP[regId] = c; return c;
 }
 const SPOTICON = {
@@ -1423,7 +1569,7 @@ const SPOTICON = {
   muara: () => { ctx.fillStyle = '#5B3E2A'; ctx.beginPath(); ctx.moveTo(-8, 1); ctx.quadraticCurveTo(0, 6, 8, 0); ctx.lineTo(-8, 1); ctx.fill(); seg(0, 1, 0, -9, '#4A3424', 1.4); ctx.fillStyle = '#E8DCC2'; ctx.beginPath(); ctx.moveTo(1, -9); ctx.lineTo(7, -1); ctx.lineTo(1, -1); ctx.fill(); }
 };
 function drawSpotPreview(sp, x, y, w, h) {
-  const Ly = getLayers(LAYOUTS[sp.layout]);
+  const Ly = getLayers(layoutFor(sp));
   ctx.save(); rrect(x, y, w, h, 10); ctx.clip();
   ctx.drawImage(Ly.far, PAD * S, 0, W * S, H * S, x, y, w, h); ctx.drawImage(Ly.main, 0, 0, W * S, H * S, x, y, w, h);
   ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(x, y + h - 26, w, 26);
@@ -1510,24 +1656,24 @@ function drawMap() {
 }
 function drawRegion() {
   ctx.imageSmoothingEnabled = false; ctx.drawImage(regionMapImage(G.region || 'kalimantan'), 0, 0, W, H); ctx.imageSmoothingEnabled = true;
-  ctx.font = 'italic 500 12px ' + FONT; ctx.fillStyle = 'rgba(150,200,220,.6)'; ctx.textAlign = 'center'; ctx.fillText('Laut', 640, 500);
-  ctx.fillStyle = 'rgba(190,230,240,.7)'; ctx.fillText('Sungai', 260, 312);
-  font(11, 700); ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,.8)'; for (const v of [[180, 306], [546, 422]]) { ctx.strokeText('Desa', v[0], v[1]); ctx.fillStyle = '#FFE8CC'; ctx.fillText('Desa', v[0], v[1]); }
+  ctx.font = 'italic 500 12px ' + FONT; ctx.fillStyle = 'rgba(150,200,220,.6)'; ctx.textAlign = 'center'; const ML = MAPLABELS[G.region] || MAPLABELS.kalimantan; ctx.fillText('Laut', ML.laut[0], ML.laut[1]);
+  ctx.fillStyle = 'rgba(190,230,240,.7)'; if (ML.sungai) ctx.fillText('Sungai', ML.sungai[0], ML.sungai[1]);
+  font(11, 700); ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,.8)'; for (const v of ML.desa) { ctx.strokeText('Desa', v[0], v[1]); ctx.fillStyle = '#FFE8CC'; ctx.fillText('Desa', v[0], v[1]); }
   // travel trail
   if (G.visitLog.length > 1) {
     ctx.setLineDash([3, 6]); ctx.strokeStyle = 'rgba(255,240,210,.75)'; ctx.lineWidth = 2; ctx.beginPath();
-    G.visitLog.forEach((v, i) => { const sp = SPOTS.find(q => q.id === v.id); i ? ctx.lineTo(sp.pin.x, sp.pin.y) : ctx.moveTo(sp.pin.x, sp.pin.y); }); ctx.stroke(); ctx.setLineDash([]);
+    G.visitLog.forEach((v, i) => { const sp = regionSpots().find(q => q.id === v.id); if (!sp) return; i ? ctx.lineTo(sp.pin.x, sp.pin.y) : ctx.moveTo(sp.pin.x, sp.pin.y); }); ctx.stroke(); ctx.setLineDash([]);
   }
   let hov = null;
-  for (const sp of SPOTS) if (Math.hypot(mouse.x - sp.pin.x, mouse.y - sp.pin.y) < 26) hov = sp;
+  for (const sp of regionSpots()) if (Math.hypot(mouse.x - sp.pin.x, mouse.y - sp.pin.y) < 26) hov = sp;
   const shown = hov || G.selSpot;
-  for (const sp of SPOTS) {
+  for (const sp of regionSpots()) {
     const p = sp.pin, on = sp === hov, sel = sp === G.selSpot;
     if (sel) { const pr = (G.time * .9) % 1; ctx.strokeStyle = 'rgba(255,226,140,' + (0.8 * (1 - pr)) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 20 + pr * 16, 0, PI2); ctx.stroke(); }
     ell(p.x, p.y + 16, 16, 5, 'rgba(0,0,0,.3)');
     ctx.beginPath(); ctx.arc(p.x, p.y, on || sel ? 21 : 18, 0, PI2); ctx.fillStyle = sel ? '#FFE3A6' : on ? '#FFFFFF' : '#F2E8D5'; ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = sel ? '#E07A3F' : 'rgba(30,40,30,.55)'; ctx.stroke();
-    ctx.save(); ctx.translate(p.x, p.y + 1); SPOTICON[sp.id](); ctx.restore();
+    ctx.save(); ctx.translate(p.x, p.y + 1); SPOTICON[sp.icon || sp.id](); ctx.restore();
     font(13, 700); const lw = ctx.measureText(sp.name).width + 20;
     rrect(p.x - lw / 2, p.y + 24, lw, 24, 12); ctx.fillStyle = 'rgba(12,24,18,.82)'; ctx.fill(); text(sp.name, p.x, p.y + 41, 13, '#FFFFFF', 'center', 700);
     if (G.regionCorrect && G.bonus[sp.id] > 0) { ctx.beginPath(); ctx.arc(p.x + 18, p.y - 16, 10, 0, PI2); ctx.fillStyle = '#FFD34D'; ctx.fill(); text('↑', p.x + 18, p.y - 11, 13, '#3A2A00', 'center', 900); }
@@ -1579,7 +1725,7 @@ function drawSummary() {
   let y = 436;
   if (G.offerSwitch) {
     rrect(40, 420, W - 80, 62, 12); ctx.fillStyle = '#2A3F31'; ctx.fill();
-    wrapText('Warga: "Belum pernah ada yang melihat monyet hidung panjang di sini. Katanya ia hidup di pulau yang berbagi daratan dengan Malaysia dan Brunei."', 58, 446, W - 120, 20, 14, '#F2E8D5', 400);
+    wrapText('Warga: "' + (VILLAGER[G.region] || 'Belum pernah ada yang melihat monyet hidung panjang di sini.') + ' Katanya ia hidup di pulau yang berbagi daratan dengan Malaysia dan Brunei."', 58, 446, W - 120, 20, 14, '#F2E8D5', 400);
     button(W - 420, 492, 210, 38, 'Pindah daerah (1x)', () => { G.switchUsed = true; G.offerSwitch = false; G.day++; G.screen = G.day > G.maxDays ? 'archive' : 'map'; if (G.screen === 'archive') sfxSoft(); }, { primary: true, size: 15 });
     button(W - 200, 492, 160, 38, 'Tetap di sini', () => { G.switchUsed = true; G.offerSwitch = false; nextDay(); }, { size: 15 });
     return;
