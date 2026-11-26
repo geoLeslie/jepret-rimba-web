@@ -173,11 +173,14 @@ const LAYOUTS = {
 // Walkable branch line: each main tree has two curved limbs rising from the trunk; thin branches reach the screen edges.
 function limbY(c, d) { return c.y + 10 - 18 * d + 6 * Math.sin(Math.PI * d); }
 function branchY(L, x) {
-  const A = L.canopy[0], B = L.canopy[1], sa = 130 * A.sc, sb = 130 * B.sc;
+  // The walkable branch line: each tree's two limbs, thin branches out to the layer edges.
+  const C = L.canopy, n = C.length, LWd = L.width || W, A = C[0], Z = C[n - 1], sa = 130 * A.sc, sz = 130 * Z.sc;
   if (x <= A.x) { const d = (A.x - x) / sa; if (d <= 1) return limbY(A, d); const t = clamp((A.x - sa - x) / Math.max(1, A.x - sa), 0, 1); return lerp(A.y - 8, A.y + 4, t) + Math.sin(Math.PI * t) * 5; }
-  if (x <= (A.x + B.x) / 2) return limbY(A, Math.min(1, (x - A.x) / sa));
-  if (x <= B.x) return limbY(B, Math.min(1, (B.x - x) / sb));
-  const d = (x - B.x) / sb; if (d <= 1) return limbY(B, d); const t = clamp((x - B.x - sb) / Math.max(1, W - B.x - sb), 0, 1); return lerp(B.y - 8, B.y + 4, t) + Math.sin(Math.PI * t) * 5;
+  if (x >= Z.x) { const d = (x - Z.x) / sz; if (d <= 1) return limbY(Z, d); const t = clamp((x - Z.x - sz) / Math.max(1, LWd - Z.x - sz), 0, 1); return lerp(Z.y - 8, Z.y + 4, t) + Math.sin(Math.PI * t) * 5; }
+  let k = 0; while (k < n - 2 && x > C[k + 1].x) k++;
+  const P = C[k], Q = C[k + 1];
+  if (x <= (P.x + Q.x) / 2) return limbY(P, Math.min(1, (x - P.x) / (130 * P.sc)));
+  return limbY(Q, Math.min(1, (Q.x - x) / (130 * Q.sc)));
 }
 for (const k in LAYOUTS) { const L = LAYOUTS[k]; const A = L.canopy[0], B = L.canopy[1]; L.perches = [A.x - 85 * A.sc, A.x + 85 * A.sc, B.x - 85 * B.sc, B.x + 85 * B.sc].map(x => ({ x, y: branchY(L, x) })); }
 const SPOTS = [
@@ -303,6 +306,73 @@ function newMission(m) {
 }
 function regionName() { const r = REGIONS.find(x => x.id === G.region); return r ? r.name : ''; }
 
+// ===== Safari car (auto drive) =====
+// The safari car drives slowly to the LEFT by itself; the player never steers.
+// So the world scrolls to the right on screen: things appear on the left and slide off
+// to the right, and an animal you wait too long for is gone.
+// World x -> screen x = world x + drive(). The layouts are one screen wide, so the
+// world continues as a mirrored copy (period 2W), which keeps the scenery seamless.
+// Set DRIVE_SPEED to 0 to turn the car off (the game then plays like before).
+const DRIVE_SPEED = 30; // px per second; a 40 s session drives about 1200 px
+function drive() { return SS ? SS.drive || 0 : 0; }
+function viewL() { return -drive(); }
+function viewR() { return W - drive(); }
+function toScreenX(wx) { return wx + drive(); }
+// While driving, a session uses ONE continuous, wide layout of its spot (wideLayout): the
+// spot's own two trees at their usual place at the start, then more trees from the area's
+// 5 trees (AREATREES) further left, on one branch line, with ground, water and sky drawn
+// across the whole width. Nothing is stitched or repeated.
+// World x of the wide layout's local x is local + SS.X0 (X0 = W - width, so the start view
+// [0, W] is the right end of the panorama).
+function wideLayout(L, D) {
+  const key = (L.key || L.kind) + '#wide' + D;
+  if (LAYOUT_VARIANTS[key]) return LAYOUT_VARIANTS[key];
+  const width = W + D + 160, off = width - W;
+  const R = mulberry(5000 + L.kind.length * 31 + (L.island ? ISLANDLOOK[L.island].seed : 0));
+  const base = treeSpecFor(L), pool = AREATREES[L.kind] || base.bg.map(b => b[3]), branching = pool.filter(t => PALMS.indexOf(t) < 0);
+  const C = [{ x: L.canopy[0].x + off, y: L.canopy[0].y, sc: L.canopy[0].sc }, { x: L.canopy[1].x + off, y: L.canopy[1].y, sc: L.canopy[1].sc }];
+  const M = [base.main[0], base.main[1]];
+  for (let x = C[0].x, k = 0; ; k++) {
+    x -= 360 + Math.round(R() * 140); if (x < 140) break;
+    const like = k % 2 === 0 ? 1 : 0; // alternate the two trees' heights so the branch line stays smooth
+    C.unshift({ x, y: L.canopy[like].y, sc: L.canopy[like].sc }); M.unshift([branching[Math.floor(R() * branching.length)], base.main[like][1]]);
+  }
+  const tall = base.bg.find(b => b[3] !== 'nipah') || base.bg[0], low = base.bg.find(b => b[3] === 'nipah') || [0, tall[1] + 6, tall[1] + 6];
+  const bg = base.bg.map(b => [b[0] + off, b[1], b[2], b[3], b[4]]); // the spot's own background trees at the start
+  for (let x = off - 120; x > -40; x -= 150 + R() * 140) { const sp = pool[Math.floor(R() * pool.length)], ref = sp === 'nipah' ? low : tall; bg.push([Math.round(x), ref[1] + Math.round((R() - .5) * 6), ref[2] + Math.round((R() - .5) * 24), sp, +(.4 + R() * .32).toFixed(2)]); }
+  const V = Object.assign({}, L, { key, width, driveD: D, canopy: C, spec: { bg, main: M } });
+  V.perches = []; for (const c of C) { V.perches.push({ x: c.x - 85 * c.sc, y: 0 }, { x: c.x + 85 * c.sc, y: 0 }); }
+  for (const q of V.perches) q.y = branchY(V, q.x);
+  return (LAYOUT_VARIANTS[key] = V);
+}
+function worldL() { return SS && SS.WL ? SS.WL : null; }
+function branchYW(L, wx) {
+  const V = worldL(); if (!V) return branchY(L, wx);
+  const lx = wx - SS.X0, C = V.canopy; let y = branchY(V, lx);
+  // the line has a small step halfway between two trees; ease over it for walkers
+  for (let i = 0; i + 1 < C.length; i++) { const m = (C[i].x + C[i + 1].x) / 2; if (Math.abs(lx - m) < 50) { y = lerp(branchY(V, m - 50), branchY(V, m + 50), (lx - m + 50) / 100); break; } }
+  return y;
+}
+function perchesIn(L, a, b) { const V = worldL() || L, o = worldL() ? SS.X0 : 0; return V.perches.map(q => ({ x: q.x + o, y: q.y })).filter(q => q.x >= a && q.x <= b).sort((u, v) => u.x - v.x); }
+function treesIn(L, a, b) { const V = worldL() || L, o = worldL() ? SS.X0 : 0; return V.canopy.map(c => ({ x: c.x + o, y: c.y, sc: c.sc })).filter(c => c.x >= a && c.x <= b).sort((u, v) => u.x - v.x); }
+// place a clue/threat (positions are defined for a one-screen layout) next to the pair of
+// trees nearest to world x `target`
+function placeIn(posFn, target, L) {
+  const V = worldL(); if (!V) { const q = posFn(L); return { x: q.x, y: q.y }; }
+  const o = SS.X0, C = V.canopy; let i = 0, bd = 1e9;
+  for (let k = 0; k + 1 < C.length; k++) { const d = Math.abs((C[k].x + C[k + 1].x) / 2 + o - target); if (d < bd) { bd = d; i = k; } }
+  const ws = (C[i].x + C[i + 1].x) / 2 + o - 445; // 445 = middle of the two trees on a normal screen
+  const pseudo = Object.assign({}, L, { canopy: [C[i], C[i + 1]].map(c => ({ x: c.x + o - ws, y: c.y, sc: c.sc })) });
+  const q = posFn(pseudo); return { x: q.x + ws, y: q.y };
+}
+function offScreen(e, m) { const sx = toScreenX(e.x); return sx < -m || sx > W + m; }
+// Draw something that covers world [0, w) as a mirrored strip, shifted right by off.
+// Copies overlap by 4 px: the blurred layers fade at their edges, which otherwise shows as a thin line.
+function tiledMirror(off, w, fn) {
+  const st = w - 4, n0 = Math.floor(-off / st), n1 = Math.floor((W - off) / st);
+  for (let n = n0; n <= n1; n++) { ctx.save(); if (n % 2 === 0) ctx.translate(off + n * st, 0); else { ctx.translate(off + n * st + w, 0); ctx.scale(-1, 1); } fn(); ctx.restore(); }
+}
+
 // ===== Entities =====
 function ent(o) { return Object.assign({ t: 0, alpha: 0, dead: false, aimT: 0, fleeing: false, kind: 'animal', f: 1, sc: 1 }, o); }
 const SCALE = {};
@@ -311,22 +381,27 @@ function fadeIn(e, d) { if (e.t < d) e.alpha = e.t / d; else e.alpha = Math.max(
 
 function mkBekantan(L) {
   const dir = Math.random() < 0.5 ? 1 : -1;
-  const P = dir === 1 ? [L.canopy[0], L.canopy[1]] : [L.canopy[1], L.canopy[0]];
-  const start = dir === 1 ? -50 : W + 50, end = dir === 1 ? W + 60 : -60;
-  const e = ent({ type: 'bekantan', kind: 'target', alpha: 1, f: dir, x: start, y: branchY(L, start), phase: 'enter', pt: 0, pose: 'walk' });
-  const D = { enter: 2.6, eat1: 2.4, leap: 1.15, eat2: 2.8, leave: 2.6 };
+  // two neighbouring trees in view, a bit left of centre (the view slides left over time)
+  const vl = viewL(), vr = viewR(), aim = vl + W * 0.42; const tr = treesIn(L, vl - 400, vr + 400); let pa = [tr[0], tr[1]], bd = 1e9;
+  for (let i = 0; i + 1 < tr.length; i++) { const d = Math.abs((tr[i].x + tr[i + 1].x) / 2 - aim); if (d < bd) { bd = d; pa = [tr[i], tr[i + 1]]; } }
+  const P = dir === 1 ? pa : [pa[1], pa[0]];
+  // it comes out of the foliage at the tip of the first tree's limb (never walks over a gap)
+  const start = P[0].x - dir * 118 * (P[0].sc || 1);
+  const e = ent({ type: 'bekantan', kind: 'target', alpha: 0, f: dir, x: start, y: branchYW(L, start), phase: 'enter', pt: 0, pose: 'walk' });
+  const D = { enter: 1.8, eat1: 2.4, leap: 1.15, eat2: 2.8, leave: 1.8 };
   e.leaveFrom = null;
   e.upd = dt => {
     e.pt += dt; const k = Math.min(1, e.pt / (e.phase === 'leave' && e.leaveFrom ? 1.4 : D[e.phase]));
-    if (e.phase === 'enter') { e.x = lerp(start, P[0].x, k); e.y = branchY(L, e.x); e.pose = 'walk'; if (k >= 1) { e.phase = 'eat1'; e.pt = 0; } }
-    else if (e.phase === 'eat1') { e.pose = 'sit'; e.y = branchY(L, e.x); if (k >= 1) { e.phase = e.fleeing ? 'leave' : 'leap'; e.pt = 0; if (e.fleeing) e.leaveFrom = { x: e.x, y: e.y }; } }
-    else if (e.phase === 'leap') { e.x = lerp(P[0].x, P[1].x, k); e.y = lerp(branchY(L, P[0].x), branchY(L, P[1].x), k) - Math.sin(Math.PI * k) * 90; e.pose = 'leap'; if (k >= 1) { e.y = branchY(L, P[1].x); if (e.fleeing) { e.phase = 'leave'; e.leaveFrom = { x: e.x, y: e.y }; } else e.phase = 'eat2'; e.pt = 0; } }
-    else if (e.phase === 'eat2') { e.pose = 'sit'; e.y = branchY(L, e.x); if (k >= 1) { e.phase = 'leave'; e.pt = 0; } }
+    if (e.phase === 'enter') { e.x = lerp(start, P[0].x, k); e.y = branchYW(L, e.x); e.pose = 'walk'; e.alpha = Math.min(1, e.pt / 0.6); if (k >= 1) { e.phase = 'eat1'; e.pt = 0; } }
+    else if (e.phase === 'eat1') { e.pose = 'sit'; e.y = branchYW(L, e.x); if (k >= 1) { e.phase = e.fleeing ? 'leave' : 'leap'; e.pt = 0; if (e.fleeing) e.leaveFrom = { x: e.x, y: e.y }; } }
+    else if (e.phase === 'leap') { e.x = lerp(P[0].x, P[1].x, k); e.y = lerp(branchYW(L, P[0].x), branchYW(L, P[1].x), k) - Math.sin(Math.PI * k) * 90; e.pose = 'leap'; if (k >= 1) { e.y = branchYW(L, P[1].x); if (e.fleeing) { e.phase = 'leave'; e.leaveFrom = { x: e.x, y: e.y }; } else e.phase = 'eat2'; e.pt = 0; } }
+    else if (e.phase === 'eat2') { e.pose = 'sit'; e.y = branchYW(L, e.x); if (k >= 1) { e.phase = 'leave'; e.pt = 0; } }
     else if (e.phase === 'leave') {
       e.pose = 'walk';
-      if (e.leaveFrom) { const tgt = e.leaveFrom.x < W / 2 ? -60 : W + 60; e.f = tgt < e.leaveFrom.x ? -1 : 1; e.x = lerp(e.leaveFrom.x, tgt, k); }
-      else e.x = lerp(P[1].x, end, k);
-      e.y = branchY(L, e.x);
+      // walks a little way along the limb and disappears into the foliage
+      if (e.leaveTo == null) { const from = e.leaveFrom ? e.leaveFrom.x : P[1].x; const away = e.leaveFrom ? (toScreenX(from) < W / 2 ? -1 : 1) : dir; e.leaveX0 = from; e.leaveTo = from + away * 110; }
+      e.f = e.leaveTo < e.leaveX0 ? -1 : 1; e.x = lerp(e.leaveX0, e.leaveTo, k);
+      e.y = branchYW(L, e.x); e.alpha = 1 - k;
       if (k >= 1) e.dead = true;
     }
   };
@@ -338,14 +413,14 @@ function mkBekantan(L) {
   return e;
 }
 function mkPekaka(L) {
-  const p = pick(L.perches);
+  const vp = perchesIn(L, viewL() + 60, viewR() - 160); const p = vp.length ? pick(vp) : pick(perchesIn(L, viewL(), viewR()).concat([{ x: viewL() + W / 3, y: branchYW(L, viewL() + W / 3) }]));
   const e = ent({ type: 'pekakak', x: p.x, y: p.y, f: pick([1, -1]), state: 'perch', st: 0, wait: rnd(2.5, 4.5) });
   e.upd = dt => {
     e.st += dt; if (e.state === 'perch') fadeIn(e, 0.5);
-    if (e.state === 'perch' && e.st > e.wait) { e.state = 'dive'; e.st = 0; e.sx = e.x; e.sy = e.y; e.tx = clamp(e.x + e.f * 80, 60, W - 60); }
+    if (e.state === 'perch' && e.st > e.wait) { e.state = 'dive'; e.st = 0; e.sx = e.x; e.sy = e.y; e.tx = clamp(e.x + e.f * 80, viewL() + 60, viewR() - 60); }
     else if (e.state === 'dive') { const k = Math.min(1, e.st / 0.55); e.x = lerp(e.sx, e.tx, k); e.y = lerp(e.sy, L.waterY + 4, k * k); if (k >= 1) { e.state = 'splash'; e.st = 0; } }
     else if (e.state === 'splash') { if (e.st > 0.45) { e.state = 'fly'; e.st = 0; } }
-    else if (e.state === 'fly') { e.x += e.f * 210 * dt; e.y -= 150 * dt; if (e.y < -40 || e.x < -60 || e.x > W + 60) e.dead = true; }
+    else if (e.state === 'fly') { e.x += e.f * 210 * dt; e.y -= 150 * dt; if (e.y < -40 || offScreen(e, 60)) e.dead = true; }
   };
   e.flee = () => { if (e.state === 'perch') { e.state = 'fly'; e.st = 0; } };
   e.moment = () => (e.state === 'dive' && e.st > 0.33) || e.state === 'splash';
@@ -354,11 +429,11 @@ function mkPekaka(L) {
   return e;
 }
 function mkKuntul(L) {
-  const e = ent({ type: 'kuntul', x: rnd(140, 820), y: L.waterY, f: pick([1, -1]), life: rnd(10, 14), state: 'walk', st: 0, next: rnd(1.6, 3) });
+  const e = ent({ type: 'kuntul', x: rnd(viewL() + 100, viewR() - 260), y: L.waterY, f: pick([1, -1]), life: rnd(10, 14), state: 'walk', st: 0, next: rnd(1.6, 3) });
   e.upd = dt => {
-    if (e.state === 'fly') { e.x += e.f * 140 * dt; e.y -= 95 * dt; if (e.y < -90 || e.x < -90 || e.x > W + 90) e.dead = true; return; }
+    if (e.state === 'fly') { e.x += e.f * 140 * dt; e.y -= 95 * dt; if (e.y < -90 || offScreen(e, 90)) e.dead = true; return; }
     fadeIn(e, 0.6); e.st += dt;
-    if (e.state === 'walk') { e.x += e.f * 14 * dt; if (e.x < 70 || e.x > W - 70) e.f *= -1; if (e.st > e.next) { e.state = Math.random() < 0.62 ? 'crouch' : 'spread'; e.st = 0; } }
+    if (e.state === 'walk') { e.x += e.f * 14 * dt; if (offScreen(e, 120)) e.dead = true; if (e.st > e.next) { e.state = Math.random() < 0.62 ? 'crouch' : 'spread'; e.st = 0; } }
     else if (e.state === 'crouch') { if (e.st > 0.7) { e.state = 'strike'; e.st = 0; } }
     else if (e.state === 'strike') { if (e.st > 0.42) { e.state = Math.random() < 0.65 ? 'fish' : 'walk'; e.st = 0; e.next = rnd(1.8, 3.2); } }
     else if (e.state === 'fish') { if (e.st > 1.2) { e.state = 'walk'; e.st = 0; e.next = rnd(2, 3.4); } }
@@ -381,7 +456,7 @@ function mkKuntul(L) {
   return e;
 }
 function mkKepiting(L) {
-  const e = ent({ type: 'kepiting', x: rnd(100, 860), y: L.groundY + rnd(-2, 8), life: rnd(8, 11), hide: false, claws: false, dir: pick([1, -1]) });
+  const e = ent({ type: 'kepiting', x: rnd(viewL() + 100, viewR() - 220), y: L.groundY + rnd(-2, 8), life: rnd(8, 11), hide: false, claws: false, dir: pick([1, -1]) });
   e.upd = dt => {
     if (e.hide) { e.alpha -= dt * 3; if (e.alpha <= 0) e.dead = true; return; }
     fadeIn(e, 0.5); e.x += Math.sin(e.t * 1.7) * 32 * dt * e.dir;
@@ -394,7 +469,7 @@ function mkKepiting(L) {
   return e;
 }
 function mkTembakul(L) {
-  const e = ent({ type: 'tembakul', x: rnd(100, 860), y: L.groundY + 6, f: pick([1, -1]), life: rnd(8, 11), jt: -1, next: rnd(0.8, 1.8), hide: false });
+  const e = ent({ type: 'tembakul', x: rnd(viewL() + 100, viewR() - 220), y: L.groundY + 6, f: pick([1, -1]), life: rnd(8, 11), jt: -1, next: rnd(0.8, 1.8), hide: false });
   e.upd = dt => {
     if (e.hide) { e.alpha -= dt * 3; if (e.alpha <= 0) e.dead = true; return; }
     fadeIn(e, 0.5); e.next -= dt;
@@ -412,10 +487,10 @@ function mkTembakul(L) {
 }
 function mkBiawak(L) {
   const f = pick([1, -1]);
-  const e = ent({ type: 'biawak', x: f === 1 ? -80 : W + 80, y: L.groundY + 4, f, alpha: 1, tongue: false, fast: false });
+  const e = ent({ type: 'biawak', x: f === 1 ? viewL() - 80 : viewR() + 80, y: L.groundY + 4, f, alpha: 1, tongue: false, fast: false });
   e.upd = dt => {
     e.moving = e.fast || Math.sin(e.t * 0.9) > -0.35; e.x += e.f * 46 * (e.fast ? 3.2 : e.moving ? 1 : 0.04) * dt; if (e.moving) e.wt = (e.wt || 0) + dt; const cyc = e.t % 2.6; e.tongue = cyc > 1.9 && cyc < 2.4;
-    if (e.t > 2 && (e.x < -100 || e.x > W + 100)) e.dead = true;
+    if (e.t > 2 && offScreen(e, 100)) e.dead = true;
   };
   e.flee = () => { e.fast = true; };
   e.moment = () => e.tongue;
@@ -424,7 +499,8 @@ function mkBiawak(L) {
   return e;
 }
 function mkKera(L) {
-  const p1 = pick(L.perches); let p2 = pick(L.perches); if (p2 === p1) p2 = L.perches[(L.perches.indexOf(p1) + 1) % 4];
+  const vp = perchesIn(L, viewL() + 40, viewR() - 120); const pool = vp.length >= 2 ? vp : perchesIn(L, viewL() - 200, viewR() + 200);
+  const i1 = Math.floor(Math.random() * pool.length); const p1 = pool[i1]; const p2 = pool[i1 + 1] || pool[i1 - 1] || p1;
   const e = ent({ type: 'kera', x: p1.x, y: p1.y, f: p2.x > p1.x ? 1 : -1, state: 'sit1', st: 0, d1: rnd(2, 3) });
   e.upd = dt => {
     e.st += dt;
@@ -442,18 +518,18 @@ function mkKera(L) {
 }
 function mkDaralaut(L) {
   const f = pick([1, -1]);
-  const e = ent({ type: 'daralaut', x: f === 1 ? -40 : W + 40, y: rnd(80, 170), f, alpha: 1, hov: false, off: rnd(0, 2), state: 'fly', st: 0 });
+  const e = ent({ type: 'daralaut', x: f === 1 ? viewL() - 40 : viewR() + 40, y: rnd(80, 170), f, alpha: 1, hov: false, off: rnd(0, 2), state: 'fly', st: 0 });
   e.by = e.y;
   e.upd = dt => {
     e.st += dt;
     if (e.state === 'fly') {
       const cyc = (e.t + e.off) % 3; e.hov = cyc > 2 && cyc < 2.9;
       e.x += e.f * (e.hov ? 22 : 130) * dt; e.y = e.by + Math.sin(e.t * 2) * 10;
-      if (e.hov && L.kind === 'estuary' && cyc > 2.7 && e.x > 80 && e.x < W - 80 && Math.random() < dt * 3) { e.state = 'dive'; e.st = 0; e.sy = e.y; }
+      if (e.hov && L.kind === 'estuary' && cyc > 2.7 && !offScreen(e, -80) && Math.random() < dt * 3) { e.state = 'dive'; e.st = 0; e.sy = e.y; }
     } else if (e.state === 'dive') { const k = Math.min(1, e.st / 0.5); e.y = lerp(e.sy, L.waterY, k * k); e.x += e.f * 20 * dt; if (k >= 1) { e.state = 'splash'; e.st = 0; } }
     else if (e.state === 'splash') { if (e.st > 0.35) { e.state = 'rise'; e.st = 0; } }
     else if (e.state === 'rise') { const k = Math.min(1, e.st / 0.9); e.y = lerp(L.waterY, e.by, k); e.x += e.f * 70 * dt; if (k >= 1) { e.state = 'fly'; } }
-    if (e.t > 1 && (e.x < -60 || e.x > W + 60)) e.dead = true;
+    if (e.t > 1 && offScreen(e, 60)) e.dead = true;
   };
   e.flee = () => {};
   e.moment = () => e.hov || e.state === 'dive' || e.state === 'splash';
@@ -467,16 +543,16 @@ function mkDaralaut(L) {
 }
 const MAKERS = { pekakak: mkPekaka, kuntul: mkKuntul, kepiting: mkKepiting, tembakul: mkTembakul, biawak: mkBiawak, kera: mkKera, daralaut: mkDaralaut };
 function mkClue(id, L) {
-  const p = CLUEDEF[id].pos(L);
-  const e = ent({ type: id, kind: 'clue', x: p.x, y: p.y, life: 13 });
+  const p = placeIn(CLUEDEF[id].pos, viewL() + W * 0.35, L); const px = p.x;
+  const e = ent({ type: id, kind: 'clue', x: px, y: p.y, life: 13 });
   e.upd = dt => { if (e.t < 0.8) e.alpha = e.t / 0.8; else if (e.t > e.life) { e.alpha -= dt; if (e.alpha <= 0) e.dead = true; } else e.alpha = 1; };
   e.flee = () => {}; e.moment = () => false; e.c = () => ({ x: e.x, y: e.y });
   e.draw = () => drawClue(id, e.x, e.y, e.t);
   return e;
 }
 function mkThreat(id, L) {
-  const p = THREATDEF[id].pos(L);
-  const e = ent({ type: id, kind: 'threat', x: p.x, y: p.y, alpha: 1, x0: p.x, sc: 1.3 });
+  const p = placeIn(THREATDEF[id].pos, viewL() + W * 0.5, L); const px = p.x;
+  const e = ent({ type: id, kind: 'threat', x: px, y: p.y, alpha: 1, x0: px, sc: 1.3 });
   e.upd = dt => { if (id === 'sampah') { e.x = e.x0 + Math.sin(e.t * 0.3) * 60; } };
   e.flee = () => {}; e.moment = () => false; e.c = () => ({ x: e.x, y: e.y - 10 });
   e.draw = () => drawThreat(id, e.x, e.y, e.t);
@@ -790,6 +866,9 @@ function drawThreat(id, x, y, t) {
 
 // ===== Scene building blocks =====
 const PAD = 26;
+// Width of the layer being built. Normally the screen width; a driving session builds
+// one continuous, wider background per spot (see wideLayout).
+let LW = W;
 function skyG(c1, c2, y0, y1) { const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, c1); g.addColorStop(1, c2); ctx.fillStyle = g; ctx.fillRect(-PAD, y0, W + 2 * PAD, y1 - y0); }
 function ridge(y, amp, col, seed, bottom) {
   const pts = []; for (let x = -PAD - 40; x <= W + PAD + 40; x += 46) pts.push([x, y + Math.sin(x * .009 + seed) * amp + Math.sin(x * .023 + seed * 1.7) * amp * .45 + ((Math.round(x / 46) % 2) ? -amp * .35 : amp * .2)]);
@@ -799,27 +878,27 @@ function ridge(y, amp, col, seed, bottom) {
 }
 function forestLine(y, col, R, size, emerg, bottom) {
   ctx.fillStyle = col;
-  for (let x = -PAD - 20; x < W + PAD + 30; x += size * (.45 + R() * .35)) {
+  for (let x = -PAD - 20; x < LW + PAD + 30; x += size * (.45 + R() * .35)) {
     const h = size * (.55 + R() * .55); ctx.beginPath(); ctx.ellipse(x, y - h * .3, size * (.5 + R() * .3), h * .7, 0, 0, PI2); ctx.fill();
     if (emerg && R() < .07) { const th = size * (1.3 + R() * 1.1); ctx.fillRect(x - 1.5, y - th, 3, th); for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.ellipse(x + (k - 1.5) * size * .32, y - th - (k % 2) * size * .2, size * .42, size * .36, 0, 0, PI2); ctx.fill(); } }
   }
-  ctx.fillRect(-PAD, y, W + 2 * PAD, (bottom || H) - y);
+  ctx.fillRect(-PAD, y, LW + 2 * PAD, (bottom || H) - y);
 }
 function cloud(x, y, s, col) { [[0, 0, 1], [-.9, .18, .72], [.95, .22, .76], [-.4, -.35, .62], [.45, -.3, .66], [1.6, .32, .5], [-1.5, .3, .48]].forEach(c => ell(x + c[0] * 28 * s, y + c[1] * 20 * s, 30 * s * c[2], 18 * s * c[2], col)); }
 function sunDisc(x, y, r, col, glow) { for (let i = 5; i >= 1; i--) ell(x, y, r * (1 + i * .55), r * (1 + i * .55), glow); ell(x, y, r, r, col); }
 // Alto-style sky: multi-stop gradient, big soft sun glow, smooth silhouette hills, streak clouds
 function altoSky(stops, y1, sx, sy, sr, sunCol, glow) {
-  const g = ctx.createLinearGradient(0, 0, 0, y1); stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c)); ctx.fillStyle = g; ctx.fillRect(-PAD, 0, W + 2 * PAD, y1);
+  const g = ctx.createLinearGradient(0, 0, 0, y1); stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c)); ctx.fillStyle = g; ctx.fillRect(-PAD, 0, LW + 2 * PAD, y1);
   ctx.save(); ctx.globalCompositeOperation = 'screen';
   const h = ctx.createRadialGradient(sx, sy, sr * .3, sx, sy, sr * 10); h.addColorStop(0, glow + '.6)'); h.addColorStop(.3, glow + '.22)'); h.addColorStop(1, glow + '0)');
-  ctx.fillStyle = h; ctx.fillRect(-PAD, 0, W + 2 * PAD, y1); ctx.restore();
+  ctx.fillStyle = h; ctx.fillRect(-PAD, 0, LW + 2 * PAD, y1); ctx.restore();
   const d = ctx.createRadialGradient(sx, sy, sr * .75, sx, sy, sr * 1.25); d.addColorStop(0, sunCol); d.addColorStop(.75, sunCol); d.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = d; ctx.beginPath(); ctx.arc(sx, sy, sr * 1.25, 0, 7); ctx.fill();
 }
 function altoHills(y, amp, col, seed) {
   ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(-PAD - 20, H);
-  for (let x = -PAD - 20; x <= W + PAD + 20; x += 8) ctx.lineTo(x, y + Math.sin(x * .006 + seed) * amp + Math.sin(x * .0155 + seed * 2.1) * amp * .5 + Math.sin(x * .031 + seed * 3.3) * amp * .12);
-  ctx.lineTo(W + PAD + 20, H); ctx.closePath(); ctx.fill();
+  for (let x = -PAD - 20; x <= LW + PAD + 20; x += 8) ctx.lineTo(x, y + Math.sin(x * .006 + seed) * amp + Math.sin(x * .0155 + seed * 2.1) * amp * .5 + Math.sin(x * .031 + seed * 3.3) * amp * .12);
+  ctx.lineTo(LW + PAD + 20, H); ctx.closePath(); ctx.fill();
 }
 function streak(x, y, w, col) { ell(x, y, w, w * .045, col); ell(x + w * .35, y - w * .035, w * .5, w * .03, col); ell(x - w * .4, y + w * .03, w * .45, w * .028, col); }
 const SUN = { river: [790, 238, 'rgba(255,214,150,'], mangrove: [300, 130, 'rgba(255,250,225,'], pedada: [840, 70, 'rgba(255,246,205,'], estuary: [160, 60, 'rgba(255,255,240,'] };
@@ -878,13 +957,13 @@ function drawLimbs(L, ci, R) {
   }
 }
 function entryBranches(L, R) {
-  const A = L.canopy[0], B = L.canopy[1]; const sa = 130 * A.sc, sb = 130 * B.sc;
+  const C = L.canopy, A = C[0], B = C[C.length - 1], LWd = L.width || W; const sa = 130 * A.sc, sb = 130 * B.sc;
   const draw = (x0, x1) => { const n = 18, top = [], bot = []; for (let k = 0; k <= n; k++) { const x = lerp(x0, x1, k / n), y = branchY(L, x), th = 7 - 3 * Math.abs(k / n - .5); top.push([x, y]); bot.push([x, y + th]); }
     ctx.fillStyle = lg(0, top[0][1] - 4, 0, top[0][1] + 10, ['#7C6148', '#4E3A2A', '#3A2A1D']); ctx.beginPath(); top.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); for (let k = n; k >= 0; k--) ctx.lineTo(bot[k][0], bot[k][1]); ctx.closePath(); ctx.fill();
     for (let k = 1; k < 4; k++) { const x = lerp(x0, x1, k / 4), y = branchY(L, x); curve(x, y + 1, x + 8, y - 12, x + 4, y - 22, 2, '#4E3A2A'); } };
-  draw(-20, A.x - sa + 4); draw(B.x + sb - 4, W + 20);
+  draw(-20, A.x - sa + 4); draw(B.x + sb - 4, LWd + 20);
   const pal = ['#2C5A35', '#437A49', '#8CBB72'];
-  for (let i = 0; i < 4; i++) { const xa = -10 + i * 34, xb = W + 10 - i * 34; leafBlob(xa, branchY(L, Math.max(0, xa)) - 16 - (i % 2) * 8, 16, pal, R); leafBlob(xb, branchY(L, Math.min(W, xb)) - 16 - (i % 2) * 8, 16, pal, R); }
+  for (let i = 0; i < 4; i++) { const xa = -10 + i * 34, xb = LWd + 10 - i * 34; leafBlob(xa, branchY(L, Math.max(0, xa)) - 16 - (i % 2) * 8, 16, pal, R); leafBlob(xb, branchY(L, Math.min(LWd, xb)) - 16 - (i % 2) * 8, 16, pal, R); }
 }
 function tuft(x, y, h, col, R) { ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.lineCap = 'round'; for (let i = 0; i < 6; i++) { const a = (R() - .5) * 1.1; ctx.beginPath(); ctx.moveTo(x + (R() - .5) * 6, y); ctx.quadraticCurveTo(x + a * h * .5, y - h * .6, x + a * h, y - h * (0.7 + R() * .4)); ctx.stroke(); } }
 function frond(x, y, len, ang, col, colD, R) {
@@ -911,8 +990,23 @@ const SPP = {
   bakau: { pal: ['#1F5A38', '#33814C', '#8CCB72'], bark: ['#6A4632', '#4E3224', '#362218'] },
   apiapi: { pal: ['#527A5A', '#82A47E', '#CFE0C4'], bark: ['#BDB7AA', '#9C9688', '#77716A'] },
   kelapa: { pal: ['#3F7E38', '#66A84A', '#B0D872'], bark: ['#9C8A70', '#7E6C54', '#5E4E3A'] },
-  nipah: { pal: ['#3E7A36', '#62A048', '#A8D470'] }
+  nipah: { pal: ['#3E7A36', '#62A048', '#A8D470'] },
+  // rengas (Gluta renghas): riverbank tree, dense crown with reddish young leaves
+  rengas: { shape: 'ketapang', pal: ['#3B6634', '#6E9446', '#C8744A'], bark: ['#8A6E5A', '#6A5240', '#4A3828'] },
+  // tancang (Bruguiera): mangrove with dark glossy leaves and reddish bark
+  tancang: { shape: 'bakau', pal: ['#18482F', '#2A6A40', '#6AA85A'], bark: ['#7E4A34', '#5C3424', '#402418'] },
+  // waru (Hibiscus tiliaceus): coastal tree with pale, broad leaves and grey bark
+  waru: { shape: 'ketapang', pal: ['#4A863E', '#80B65A', '#D6E78C'], bark: ['#9A928A', '#77706A', '#55504A'] }
 };
+// The 5 trees of each area. As the safari car drives, every new stretch of a spot
+// mixes these, so the forest changes but always fits the place.
+const AREATREES = {
+  river: ['beringin', 'meranti', 'rengas', 'ketapang', 'nipah'],   // Tepi Sungai
+  mangrove: ['bakau', 'apiapi', 'tancang', 'pedada', 'nipah'],     // Hutan Bakau
+  pedada: ['pedada', 'apiapi', 'ketapang', 'waru', 'nipah'],       // Pohon Pedada
+  estuary: ['bakau', 'apiapi', 'nipah', 'waru', 'kelapa']          // Muara
+};
+const PALMS = ['kelapa', 'nipah'];
 function trunkC(x, base, top, w, bark, lean) {
   lean = lean || 0;
   ctx.fillStyle = lg(x - w * 1.6, 0, x + w * 1.6, 0, bark);
@@ -1009,7 +1103,7 @@ function crownNipah(sc, pal, R) {
   return g;
 }
 function buildTree(T, R) {
-  const { x, base, by, sp, sc, main } = T; const pal = jitterPal(SPP[sp].pal, R); const bark = SPP[sp].bark;
+  const { x, base, by, sc, main } = T; const spec = SPP[T.sp]; const sp = spec.shape || T.sp; const pal = jitterPal(spec.pal, R); const bark = spec.bark || SPP[sp].bark;
   let lift = 0, w = 280 * sc, h = 120 * sc;
   if (sp === 'kelapa') { const lean = (R() - .5) * 60 * sc; T.lean = lean; ctx.strokeStyle = bark[1]; trunkC(x, base, by, 5 * sc, bark, lean); for (let k = 0; k < 10; k++) { const t = k / 10, yy = lerp(base, by, t), xx = x + lean * t * t; seg(xx - 4 * sc, yy, xx + 4 * sc, yy, 'rgba(40,28,18,.35)', 1); } }
   else if (sp === 'nipah') { }
@@ -1060,7 +1154,7 @@ function drawCrowns(crowns, t) {
 
 // ===== Layout art: far / main / fg layers (prerendered once) =====
 const LAYER_CACHE = {};
-function reflect(T, m, y0, y1, alpha) { ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, y1 - y0); ctx.clip(); ctx.globalAlpha = alpha; ctx.translate(0, 2 * m); ctx.scale(1, -1); ctx.drawImage(T, 0, 0, W, H); ctx.restore(); }
+function reflect(T, m, y0, y1, alpha) { ctx.save(); ctx.beginPath(); ctx.rect(0, y0, LW, y1 - y0); ctx.clip(); ctx.globalAlpha = alpha; ctx.translate(0, 2 * m); ctx.scale(1, -1); ctx.drawImage(T, 0, 0, LW, H); ctx.restore(); }
 const TREESPEC = {
   river: { bg: [[70, 352, 262, 'kelapa', .6], [445, 350, 290, 'ketapang', .42], [900, 352, 250, 'kelapa', .7], [520, 350, 300, 'kelapa', .45]], main: [['beringin', 1], ['meranti', 1]] },
   mangrove: { bg: [[90, 374, 282, 'bakau', .45], [440, 372, 292, 'apiapi', .4], [880, 374, 280, 'bakau', .48], [330, 380, 380, 'nipah', .55], [770, 382, 382, 'nipah', .6]], main: [['bakau', 1], ['apiapi', 1]] },
@@ -1113,8 +1207,8 @@ function layoutFor(spot) {
 function hazeFor(L) { return (L.island && ISLANDLOOK[L.island].haze) || HAZE[L.kind]; }
 // Tree list for a layout: the original for Kalimantan, generated from the island look otherwise.
 function treeSpecFor(L) {
-  if (!L.island) return TREESPEC[L.kind];
   if (L.spec) return L.spec;
+  if (!L.island) return TREESPEC[L.kind];
   const look = ISLANDLOOK[L.island], t = look.trees[L.kind], orig = TREESPEC[L.kind];
   const R = mulberry(look.seed * 7 + L.kind.length * 13);
   const tall = orig.bg.find(b => b[3] !== 'nipah'), low = orig.bg.find(b => b[3] === 'nipah') || [0, tall[1] + 6, tall[1] + 6];
@@ -1128,102 +1222,130 @@ function treeSpecFor(L) {
 function tint(c, col, a) { const g = c.getContext('2d'); g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-atop'; g.globalAlpha = a; g.fillStyle = col; g.fillRect(0, 0, c.width, c.height); g.restore(); return c; }
 function blurred(c, px) { const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; const g = o.getContext('2d'); try { g.filter = 'blur(' + (px * S) + 'px)'; } catch (e) {} g.drawImage(c, 0, 0); return o; }
 function buildForest(L, R) {
-  const spec = treeSpecFor(L); const bgCrowns = [], mainCrowns = [];
-  let bgBase = mkLayer(W, H, () => { for (const b of spec.bg) bgCrowns.push(buildTree({ x: b[0], base: b[1], by: b[2], sp: b[3], sc: b[4], main: false }, R)); });
+  const spec = treeSpecFor(L); const bgCrowns = [], mainCrowns = [], LWd = L.width || W;
+  let bgBase = mkLayer(LWd, H, () => { for (const b of spec.bg) bgCrowns.push(buildTree({ x: b[0], base: b[1], by: b[2], sp: b[3], sc: b[4], main: false }, R)); });
   // aerial perspective: background trees take the sky's haze and a slight blur
   const hz = hazeFor(L); tint(bgBase, hz, .4); bgBase = blurred(bgBase, .6);
   for (const cr of bgCrowns) { tint(cr.c, hz, .4); cr.c = blurred(cr.c, .6); cr.hangers = []; }
-  const mainBase = mkLayer(W, H, () => { L.canopy.forEach((c, i) => mainCrowns.push(buildTree({ x: c.x, base: L.base, by: c.y, sp: spec.main[i][0], sc: spec.main[i][1], main: true, L, ci: i }, R))); entryBranches(L, R); });
-  const full = mkLayer(W, H, () => { ctx.drawImage(bgBase, 0, 0, W, H); drawCrowns(bgCrowns, 0); ctx.drawImage(mainBase, 0, 0, W, H); drawCrowns(mainCrowns, 0); });
+  const mainBase = mkLayer(LWd, H, () => { L.canopy.forEach((c, i) => mainCrowns.push(buildTree({ x: c.x, base: L.base, by: c.y, sp: spec.main[i][0], sc: spec.main[i][1], main: true, L, ci: i }, R))); entryBranches(L, R); });
+  const full = mkLayer(LWd, H, () => { ctx.drawImage(bgBase, 0, 0, LWd, H); drawCrowns(bgCrowns, 0); ctx.drawImage(mainBase, 0, 0, LWd, H); drawCrowns(mainCrowns, 0); });
   return { bgBase, mainBase, full, bgCrowns, mainCrowns };
 }
+// Extra clouds / streaks / boats along a panorama's sky (the spot's own ones stay at the start end).
+function extraSky(kind, fo, R) {
+  for (let q = fo - 260; q > -100; q -= 280 + R() * 320) {
+    if (kind === 'river') streak(q, 60 + R() * 110, 90 + R() * 80, 'rgba(255,206,184,.42)');
+    else cloud(q, 55 + R() * 80, .6 + R() * .5, kind === 'estuary' ? 'rgba(255,255,255,.85)' : kind === 'pedada' ? 'rgba(255,255,255,.75)' : 'rgba(255,255,255,.5)');
+    if (kind === 'estuary' && R() < .4) boat(q + 60, 318 + R() * 12, .4 + R() * .4);
+  }
+}
+// Foreground plants that pass by close to the car along a panorama.
+function extraFg(kind, R) {
+  for (let q = LW - 420; q > 60; q -= 360 + R() * 420) {
+    const a = R() < .5 ? -0.7 - R() * .5 : -2.4 + R() * .5;
+    if (kind === 'river') { if (R() < .5) fern(q, H + 10 + R() * 14, 130 + R() * 40, a, '#2E4C2C', R); else reeds(q, H + 4, R); }
+    else if (kind === 'pedada') fern(q, H + 10 + R() * 14, 130 + R() * 40, a, '#2F5A30', R);
+    else frond(q, H + 10 + R() * 20, 180 + R() * 50, a, '#4C7A3C', '#2F5A2C', R);
+  }
+}
+// Mud pools along the estuary panorama.
+function extraPools(mo, R) { const out = []; for (let q = mo - 60; q > 40; q -= 150 + R() * 170) out.push([q, 404 + R() * 100, 40 + R() * 60, 7 + R() * 8]); return out; }
 function getLayers(L) {
   const ck = L.key || L.kind;
   if (LAYER_CACHE[ck]) return LAYER_CACHE[ck];
-  const R = mulberry({ river: 11, mangrove: 23, pedada: 37, estuary: 41 }[L.kind] + (L.island ? ISLANDLOOK[L.island].seed : 0));
+  const R = mulberry({ river: 11, mangrove: 23, pedada: 37, estuary: 41 }[L.kind] + (L.island ? ISLANDLOOK[L.island].seed : 0) + (L.tileN || 0) * 7919);
   const A = L.canopy[0], B = L.canopy[1]; let far, main, fg; const FO = buildForest(L, R);
+  const D = L.driveD || 0, mainW = L.width || W, farW = W + 2 * PAD + (D ? Math.ceil(D * 0.25) + 60 : 0), fgW = W + 2 * PAD + (D ? Math.ceil(D * 1.45) + 60 : 0);
+  const fo = farW - (W + 2 * PAD), mo = mainW - W; // the spot's own decorations sit at the start (right) end
   if (L.kind === 'river') {
-    far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      altoSky(['#6F5C92', '#C97A78', '#F3AE78', '#FCDDA4'], 360, 790, 238, 34, '#FFF4D2', 'rgba(255,214,150,');
-      streak(200, 84, 170, 'rgba(255,206,184,.5)'); streak(540, 58, 130, 'rgba(255,214,196,.42)'); streak(880, 124, 120, 'rgba(255,222,200,.5)'); streak(420, 168, 90, 'rgba(255,200,170,.35)');
+    far = mkLayer(farW, H, () => { LW = farW - 2 * PAD; ctx.translate(PAD, 0);
+      altoSky(['#6F5C92', '#C97A78', '#F3AE78', '#FCDDA4'], 360, 790 + fo, 238, 34, '#FFF4D2', 'rgba(255,214,150,');
+      streak(200 + fo, 84, 170, 'rgba(255,206,184,.5)'); streak(540 + fo, 58, 130, 'rgba(255,214,196,.42)'); streak(880 + fo, 124, 120, 'rgba(255,222,200,.5)'); streak(420 + fo, 168, 90, 'rgba(255,200,170,.35)');
       altoHills(262, 18, '#B58A92', 2); altoHills(290, 13, '#946F78', 4.2); forestLine(318, '#6D8C74', R, 22, true); forestLine(336, '#4E6E56', R, 28, true); });
-    main = mkLayer(W, H, () => {
-      ctx.fillStyle = lg(0, 342, 0, 406, ['#7E6849', '#5E4B35']); ctx.fillRect(0, 342, W, 66);
-      ctx.fillStyle = '#6E8B47'; ctx.beginPath(); ctx.moveTo(0, 356); for (let x = 0; x <= W; x += 6) ctx.lineTo(x, 343 + Math.sin(x * .2) * 2.5 + R() * 3); ctx.lineTo(W, 358); ctx.closePath(); ctx.fill();
-      for (let i = 0; i < 26; i++) tuft(R() * W, 352 + R() * 6, 8 + R() * 8, i % 2 ? '#5E7D3C' : '#87A458', R);
-      for (let i = 0; i < 10; i++) ell(R() * W, 386 + R() * 16, 6 + R() * 6, 3 + R() * 2, '#4F3F2D');
-      ctx.fillStyle = lg(0, 404, 0, H, ['#6B9A98', '#4C7C80', '#355F68']); ctx.fillRect(0, 404, W, H - 404);
-      ctx.fillStyle = 'rgba(255,230,180,.25)'; ctx.fillRect(0, 404, W, 3);
-      reflect(FO.full, 404, 405, H, .25); ctx.drawImage(FO.bgBase, 0, 0, W, H);
-      for (let i = 0; i < 30; i++) ell(700 + (R() - .5) * 200, 420 + R() * 110, 8 + R() * 18, 1.2, 'rgba(255,225,170,.35)'); });
-    fg = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      fern(-30, H + 10, 140, -0.9, '#2E4C2C', R); fern(-10, H + 20, 160, -0.6, '#3A5E36', R); reeds(W - 90, H + 4, R); reeds(W - 40, H + 6, R); fern(W + 30, H + 14, 150, -2.4, '#2E4C2C', R);
-      leafBlob(-20, -10, 60, ['#1F3A24', '#2C4F30', '#4C7A48'], R); leafBlob(W + 20, -20, 50, ['#1F3A24', '#2C4F30', '#4C7A48'], R); });
+    main = mkLayer(mainW, H, () => { LW = mainW;
+      ctx.fillStyle = lg(0, 342, 0, 406, ['#7E6849', '#5E4B35']); ctx.fillRect(0, 342, LW, 66);
+      ctx.fillStyle = '#6E8B47'; ctx.beginPath(); ctx.moveTo(0, 356); for (let x = 0; x <= LW; x += 6) ctx.lineTo(x, 343 + Math.sin(x * .2) * 2.5 + R() * 3); ctx.lineTo(LW, 358); ctx.closePath(); ctx.fill();
+      for (let i = 0; i < 26 * LW / W; i++) tuft(R() * LW, 352 + R() * 6, 8 + R() * 8, i % 2 ? '#5E7D3C' : '#87A458', R);
+      for (let i = 0; i < 10 * LW / W; i++) ell(R() * LW, 386 + R() * 16, 6 + R() * 6, 3 + R() * 2, '#4F3F2D');
+      ctx.fillStyle = lg(0, 404, 0, H, ['#6B9A98', '#4C7C80', '#355F68']); ctx.fillRect(0, 404, LW, H - 404);
+      ctx.fillStyle = 'rgba(255,230,180,.25)'; ctx.fillRect(0, 404, LW, 3);
+      reflect(FO.full, 404, 405, H, .25); ctx.drawImage(FO.bgBase, 0, 0, LW, H);
+      for (let i = 0; i < 30; i++) ell(700 + mo + (R() - .5) * 200, 420 + R() * 110, 8 + R() * 18, 1.2, 'rgba(255,225,170,.35)'); });
+    fg = mkLayer(fgW, H, () => { LW = fgW - 2 * PAD; ctx.translate(PAD, 0);
+      fern(-30, H + 10, 140, -0.9, '#2E4C2C', R); fern(-10, H + 20, 160, -0.6, '#3A5E36', R); reeds(LW - 90, H + 4, R); reeds(LW - 40, H + 6, R); fern(LW + 30, H + 14, 150, -2.4, '#2E4C2C', R);
+      leafBlob(-20, -10, 60, ['#1F3A24', '#2C4F30', '#4C7A48'], R); leafBlob(LW + 20, -20, 50, ['#1F3A24', '#2C4F30', '#4C7A48'], R); });
   } else if (L.kind === 'mangrove') {
-    far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      altoSky(['#A5C5C4', '#D0E3DB', '#EEF2E7'], 350, 300, 130, 26, 'rgba(255,252,236,.95)', 'rgba(255,250,225,');
-      cloud(700, 80, 1.1, 'rgba(255,255,255,.55)'); forestLine(310, '#A8BFB2', R, 20, false); forestLine(330, '#86A595', R, 24, false); forestLine(346, '#6B8C78', R, 26, false); });
-    main = mkLayer(W, H, () => {
-      ctx.fillStyle = lg(0, 346, 0, H, ['#7C8A66', '#5E6C48', '#47552F']); ctx.fillRect(0, 346, W, H - 346);
-      ctx.fillStyle = '#76634A'; ctx.beginPath(); ctx.moveTo(0, 374); for (let x = 0; x <= W; x += 16) ctx.lineTo(x, 370 + Math.sin(x * .03) * 5 + R() * 3); ctx.lineTo(W, 404); for (let x = W; x >= 0; x -= 16) ctx.lineTo(x, 400 + Math.sin(x * .05) * 6 + R() * 3); ctx.closePath(); ctx.fill();
-      for (let i = 0; i < 40; i++) ell(R() * W, 376 + R() * 20, 4 + R() * 10, 1.2 + R(), 'rgba(255,255,255,.12)');
-      pneumato(0, W, 384, R, '#4E3E2D');
-      reflect(FO.full, 400, 404, H, .22); ctx.drawImage(FO.bgBase, 0, 0, W, H); });
-    fg = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
+    far = mkLayer(farW, H, () => { LW = farW - 2 * PAD; ctx.translate(PAD, 0);
+      altoSky(['#A5C5C4', '#D0E3DB', '#EEF2E7'], 350, 300 + fo, 130, 26, 'rgba(255,252,236,.95)', 'rgba(255,250,225,');
+      cloud(700 + fo, 80, 1.1, 'rgba(255,255,255,.55)'); forestLine(310, '#A8BFB2', R, 20, false); forestLine(330, '#86A595', R, 24, false); forestLine(346, '#6B8C78', R, 26, false); });
+    main = mkLayer(mainW, H, () => { LW = mainW;
+      ctx.fillStyle = lg(0, 346, 0, H, ['#7C8A66', '#5E6C48', '#47552F']); ctx.fillRect(0, 346, LW, H - 346);
+      ctx.fillStyle = '#76634A'; ctx.beginPath(); ctx.moveTo(0, 374); for (let x = 0; x <= LW; x += 16) ctx.lineTo(x, 370 + Math.sin(x * .03) * 5 + R() * 3); ctx.lineTo(LW, 404); for (let x = LW; x >= 0; x -= 16) ctx.lineTo(x, 400 + Math.sin(x * .05) * 6 + R() * 3); ctx.closePath(); ctx.fill();
+      for (let i = 0; i < 40 * LW / W; i++) ell(R() * LW, 376 + R() * 20, 4 + R() * 10, 1.2 + R(), 'rgba(255,255,255,.12)');
+      pneumato(0, LW, 384, R, '#4E3E2D');
+      reflect(FO.full, 400, 404, H, .22); ctx.drawImage(FO.bgBase, 0, 0, LW, H); });
+    fg = mkLayer(fgW, H, () => { LW = fgW - 2 * PAD; ctx.translate(PAD, 0);
       frond(-30, H + 10, 200, -0.75, '#4C7A3C', '#2F5A2C', R); frond(-10, H + 30, 230, -1.05, '#5A8A46', '#35632F', R);
-      frond(W + 30, H + 10, 200, -2.4, '#4C7A3C', '#2F5A2C', R); frond(W + 10, H + 30, 220, -2.05, '#5A8A46', '#35632F', R); });
+      frond(LW + 30, H + 10, 200, -2.4, '#4C7A3C', '#2F5A2C', R); frond(LW + 10, H + 30, 220, -2.05, '#5A8A46', '#35632F', R); });
   } else if (L.kind === 'pedada') {
-    far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      altoSky(['#7FBFD9', '#BFE3E6', '#F3F4E0'], 356, 840, 70, 24, '#FFFBE6', 'rgba(255,246,205,');
-      cloud(220, 70, 1.1, 'rgba(255,255,255,.8)'); cloud(560, 110, .8, 'rgba(255,255,255,.7)');
+    far = mkLayer(farW, H, () => { LW = farW - 2 * PAD; ctx.translate(PAD, 0);
+      altoSky(['#7FBFD9', '#BFE3E6', '#F3F4E0'], 356, 840 + fo, 70, 24, '#FFFBE6', 'rgba(255,246,205,');
+      cloud(220 + fo, 70, 1.1, 'rgba(255,255,255,.8)'); cloud(560 + fo, 110, .8, 'rgba(255,255,255,.7)');
       altoHills(288, 16, '#A9C9BE', 5); altoHills(310, 10, '#86B29A', 7.3); forestLine(330, '#5E8E62', R, 26, true); forestLine(346, '#4A7A50', R, 28, true); });
-    main = mkLayer(W, H, () => {
-      ctx.fillStyle = lg(0, 350, 0, 414, ['#86704C', '#664F36']); ctx.fillRect(0, 350, W, 66);
-      ctx.fillStyle = '#7AAA52'; ctx.beginPath(); ctx.moveTo(0, 360); for (let x = 0; x <= W; x += 6) ctx.lineTo(x, 349 + Math.sin(x * .15) * 2 + R() * 3); ctx.lineTo(W, 362); ctx.closePath(); ctx.fill();
-      for (let i = 0; i < 26; i++) tuft(R() * W, 358 + R() * 6, 8 + R() * 8, i % 2 ? '#6A9A45' : '#9CC56A', R);
-      pneumato(520, 820, 404, R, '#5B4A37');
-      ctx.fillStyle = lg(0, 414, 0, H, ['#76AFA5', '#5A9088', '#3F726C']); ctx.fillRect(0, 414, W, H - 414);
-      reflect(FO.full, 414, 415, H, .24); ctx.drawImage(FO.bgBase, 0, 0, W, H); });
-    fg = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      fern(-20, H + 10, 150, -0.8, '#2F5A30', R); fern(W + 20, H + 10, 150, -2.3, '#2F5A30', R); fern(W - 20, H + 30, 130, -2.0, '#3E6E3A', R);
-      leafBlob(W + 10, -14, 56, ['#244A2A', '#356A3A', '#6EA45E'], R); });
+    main = mkLayer(mainW, H, () => { LW = mainW;
+      ctx.fillStyle = lg(0, 350, 0, 414, ['#86704C', '#664F36']); ctx.fillRect(0, 350, LW, 66);
+      ctx.fillStyle = '#7AAA52'; ctx.beginPath(); ctx.moveTo(0, 360); for (let x = 0; x <= LW; x += 6) ctx.lineTo(x, 349 + Math.sin(x * .15) * 2 + R() * 3); ctx.lineTo(LW, 362); ctx.closePath(); ctx.fill();
+      for (let i = 0; i < 26 * LW / W; i++) tuft(R() * LW, 358 + R() * 6, 8 + R() * 8, i % 2 ? '#6A9A45' : '#9CC56A', R);
+      pneumato(520 + mo, 820 + mo, 404, R, '#5B4A37'); for (let q = mo + 200; q > 160; q -= 380 + R() * 320) pneumato(q - 240, q, 404, R, '#5B4A37');
+      ctx.fillStyle = lg(0, 414, 0, H, ['#76AFA5', '#5A9088', '#3F726C']); ctx.fillRect(0, 414, LW, H - 414);
+      reflect(FO.full, 414, 415, H, .24); ctx.drawImage(FO.bgBase, 0, 0, LW, H); });
+    fg = mkLayer(fgW, H, () => { LW = fgW - 2 * PAD; ctx.translate(PAD, 0);
+      fern(-20, H + 10, 150, -0.8, '#2F5A30', R); fern(LW + 20, H + 10, 150, -2.3, '#2F5A30', R); fern(LW - 20, H + 30, 130, -2.0, '#3E6E3A', R);
+      leafBlob(LW + 10, -14, 56, ['#244A2A', '#356A3A', '#6EA45E'], R); });
   } else {
-    far = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      altoSky(['#58ACDC', '#A6D7EA', '#E6F4F8'], 302, 160, 60, 22, '#FFFDF0', 'rgba(255,255,240,');
-      cloud(420, 90, 1.2, 'rgba(255,255,255,.9)'); cloud(780, 60, .9, 'rgba(255,255,255,.85)'); cloud(640, 150, .6, 'rgba(255,255,255,.7)');
-      ctx.fillStyle = '#7FA6AF'; ctx.beginPath(); ctx.moveTo(40, 302); ctx.quadraticCurveTo(120, 278, 220, 302); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = lg(0, 300, 0, 366, ['#5BA0B2', '#4A8EA3']); ctx.fillRect(-PAD, 300, W + 2 * PAD, 66); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(-PAD, 300, W + 2 * PAD, 1.5);
-      boat(420, 326, .8); boat(560, 316, .5); });
-    main = mkLayer(W, H, () => {
-      ctx.fillStyle = lg(0, 364, 0, H, ['#A89273', '#937D5E', '#7E6A4E']); ctx.beginPath(); ctx.moveTo(0, 368); for (let x = 0; x <= W; x += 16) ctx.lineTo(x, 364 + Math.sin(x * .04) * 3); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
-      [[180, 472, 74, 14], [430, 502, 96, 16], [700, 482, 84, 12], [880, 414, 62, 10], [330, 404, 52, 8], [560, 420, 40, 7]].forEach(p => { ell(p[0], p[1], p[2], p[3], '#8FB8C2'); ell(p[0] - p[2] * .2, p[1] - p[3] * .3, p[2] * .6, p[3] * .35, 'rgba(255,255,255,.35)'); });
-      for (let i = 0; i < 60; i++) ell(R() * W, 380 + R() * 150, 2 + R() * 5, .8, 'rgba(70,55,35,.35)');
-      pneumato(150, 330, 396, R); pneumato(540, 720, 396, R);
-      ctx.drawImage(FO.bgBase, 0, 0, W, H); });
-    fg = mkLayer(W + 2 * PAD, H, () => { ctx.translate(PAD, 0);
-      frond(-30, H + 10, 190, -0.8, '#5C8A46', '#35632F', R); frond(-10, H + 34, 210, -1.1, '#6A9A50', '#3E6E36', R); frond(W + 30, H + 20, 200, -2.3, '#5C8A46', '#35632F', R); });
+    far = mkLayer(farW, H, () => { LW = farW - 2 * PAD; ctx.translate(PAD, 0);
+      altoSky(['#58ACDC', '#A6D7EA', '#E6F4F8'], 302, 160 + fo, 60, 22, '#FFFDF0', 'rgba(255,255,240,');
+      cloud(420 + fo, 90, 1.2, 'rgba(255,255,255,.9)'); cloud(780 + fo, 60, .9, 'rgba(255,255,255,.85)'); cloud(640 + fo, 150, .6, 'rgba(255,255,255,.7)');
+      ctx.fillStyle = '#7FA6AF'; ctx.beginPath(); ctx.moveTo(40 + fo, 302); ctx.quadraticCurveTo(120 + fo, 278, 220 + fo, 302); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = lg(0, 300, 0, 366, ['#5BA0B2', '#4A8EA3']); ctx.fillRect(-PAD, 300, LW + 2 * PAD, 66); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(-PAD, 300, LW + 2 * PAD, 1.5);
+      boat(420 + fo, 326, .8); boat(560 + fo, 316, .5); });
+    main = mkLayer(mainW, H, () => { LW = mainW;
+      ctx.fillStyle = lg(0, 364, 0, H, ['#A89273', '#937D5E', '#7E6A4E']); ctx.beginPath(); ctx.moveTo(0, 368); for (let x = 0; x <= LW; x += 16) ctx.lineTo(x, 364 + Math.sin(x * .04) * 3); ctx.lineTo(LW, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+      [[180, 472, 74, 14], [430, 502, 96, 16], [700, 482, 84, 12], [880, 414, 62, 10], [330, 404, 52, 8], [560, 420, 40, 7]].map(q => [q[0] + mo, q[1], q[2], q[3]]).concat(extraPools(mo, R)).forEach(p => { ell(p[0], p[1], p[2], p[3], '#8FB8C2'); ell(p[0] - p[2] * .2, p[1] - p[3] * .3, p[2] * .6, p[3] * .35, 'rgba(255,255,255,.35)'); });
+      for (let i = 0; i < 60 * LW / W; i++) ell(R() * LW, 380 + R() * 150, 2 + R() * 5, .8, 'rgba(70,55,35,.35)');
+      pneumato(150 + mo, 330 + mo, 396, R); pneumato(540 + mo, 720 + mo, 396, R); for (let q = mo + 100; q > 160; q -= 360 + R() * 300) pneumato(q - 200, q, 396, R);
+      ctx.drawImage(FO.bgBase, 0, 0, LW, H); });
+    fg = mkLayer(fgW, H, () => { LW = fgW - 2 * PAD; ctx.translate(PAD, 0);
+      frond(-30, H + 10, 190, -0.8, '#5C8A46', '#35632F', R); frond(-10, H + 34, 210, -1.1, '#6A9A50', '#3E6E36', R); frond(LW + 30, H + 20, 200, -2.3, '#5C8A46', '#35632F', R); });
   }
-  { const hy = HORIZON[L.kind]; const hz = mkLayer(W + 2 * PAD, H, () => { ctx.drawImage(far, 0, 0, W + 2 * PAD, H); const g = ctx.createLinearGradient(0, hy - 90, 0, hy + 10); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, hazeFor(L) + 'AA'); ctx.fillStyle = g; ctx.fillRect(0, hy - 90, W + 2 * PAD, 100); }); far = blurred(hz, 1); }
+  if (D) { // decorations along the rest of the panorama
+    const f0 = far; far = mkLayer(farW, H, () => { ctx.drawImage(f0, 0, 0, farW, H); LW = farW - 2 * PAD; ctx.translate(PAD, 0); extraSky(L.kind, fo, R); });
+    const g0 = fg; fg = mkLayer(fgW, H, () => { ctx.drawImage(g0, 0, 0, fgW, H); LW = fgW - 2 * PAD; ctx.translate(PAD, 0); extraFg(L.kind, R); });
+  }
+  LW = W;
+  { const hy = HORIZON[L.kind]; const hz = mkLayer(farW, H, () => { ctx.drawImage(far, 0, 0, farW, H); const g = ctx.createLinearGradient(0, hy - 90, 0, hy + 10); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, hazeFor(L) + 'AA'); ctx.fillStyle = g; ctx.fillRect(0, hy - 90, farW, 100); }); far = blurred(hz, 1); }
   tint(fg, '#0C1C10', .32); fg = blurred(fg, 2.2);
   const vig = mkLayer(W, H, () => { const g = ctx.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, H * .95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(10,15,10,.38)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); });
-  return (LAYER_CACHE[ck] = { far, main, fg, vig, FO });
+  return (LAYER_CACHE[ck] = { far, main, fg, vig, FO, farW, fgW, mainW });
 }
 const SHIMMER = { river: [[408, 540]], mangrove: [[350, 368], [410, 540]], pedada: [[418, 540]], estuary: [[304, 362]] };
 const HORIZON = { river: 352, mangrove: 348, pedada: 352, estuary: 300 };
 function drawScene(L, t, ev) {
-  const Ly = getLayers(L); const mx = clamp(mouse.x / W - .5, -.5, .5);
-  ctx.drawImage(Ly.far, -PAD + mx * 10, 0, W + 2 * PAD, H);
+  const Ly = getLayers(worldL() || L); const mx = clamp(mouse.x / W - .5, -.5, .5);
+  const dv = drive();
+  ctx.drawImage(Ly.far, -(Ly.farW - (W + 2 * PAD)) - PAD + mx * 10 + dv * 0.2, 0, Ly.farW, H);
   if (L.kind === 'river' && ev > 0) { ctx.globalAlpha = ev * .55; const g = ctx.createLinearGradient(0, 0, 0, HORIZON.river); g.addColorStop(0, '#E2702C'); g.addColorStop(1, '#F9B860'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, HORIZON.river); ctx.globalAlpha = 1; }
   if (L.kind === 'pedada' && ev > 0) { ctx.globalAlpha = ev * .35; ctx.fillStyle = '#FFF2C4'; ctx.fillRect(0, 0, W, HORIZON.pedada); ctx.globalAlpha = 1; }
-  ctx.drawImage(Ly.main, 0, 0, W, H);
+  const mx0 = W - Ly.mainW + dv;
+  ctx.drawImage(Ly.main, mx0, 0, Ly.mainW, H);
   ctx.strokeStyle = 'rgba(255,255,255,.2)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
-  for (const band of SHIMMER[L.kind]) { const [y0, y1] = band; const n = Math.round((y1 - y0) / 9); for (let i = 0; i < n; i++) { const yy = y0 + 6 + i * ((y1 - y0 - 8) / n); const sp = 10 + (i % 3) * 6; const off = (t * sp + i * 137) % (W + 160) - 80; const len = 14 + (i % 4) * 8; ctx.beginPath(); ctx.moveTo(off - len, yy); ctx.lineTo(off + len, yy); ctx.stroke(); } }
-  drawCrowns(Ly.FO.bgCrowns, t); ctx.drawImage(Ly.FO.mainBase, 0, 0, W, H); drawCrowns(Ly.FO.mainCrowns, t);
+  for (const band of SHIMMER[L.kind]) { const [y0, y1] = band; const n = Math.round((y1 - y0) / 9); for (let i = 0; i < n; i++) { const yy = y0 + 6 + i * ((y1 - y0 - 8) / n); const sp = 10 + (i % 3) * 6; const off = (t * sp + dv + i * 137) % (W + 160) - 80; const len = 14 + (i % 4) * 8; ctx.beginPath(); ctx.moveTo(off - len, yy); ctx.lineTo(off + len, yy); ctx.stroke(); } }
+  ctx.save(); ctx.translate(mx0, 0); drawCrowns(Ly.FO.bgCrowns, t); ctx.drawImage(Ly.FO.mainBase, 0, 0, Ly.mainW, H); drawCrowns(Ly.FO.mainCrowns, t); ctx.restore();
 }
 function drawForeground(L, t, ev) {
-  const Ly = getLayers(L); const mx = clamp(mouse.x / W - .5, -.5, .5);
+  const Ly = getLayers(worldL() || L); const mx = clamp(mouse.x / W - .5, -.5, .5);
   const sk = Math.sin(t * .35) * .01 + gustAt(t) * Math.sin(t * 1.0) * .022;
-  ctx.save(); ctx.translate(0, H); ctx.transform(1, 0, sk, 1, 0, 0); ctx.translate(0, -H); ctx.drawImage(Ly.fg, -PAD - mx * 26, 0, W + 2 * PAD, H); ctx.restore();
+  ctx.save(); ctx.translate(0, H); ctx.transform(1, 0, sk, 1, 0, 0); ctx.translate(0, -H); ctx.drawImage(Ly.fg, -(Ly.fgW - (W + 2 * PAD)) - PAD - mx * 26 + drive() * 1.35, 0, Ly.fgW, H); ctx.restore();
 }
 function drawOverlay(L, t, ev) {
   if (L.kind === 'river' && ev > 0) { ctx.fillStyle = 'rgba(255,140,50,' + (0.13 * ev) + ')'; ctx.fillRect(0, 0, W, H); }
@@ -1304,7 +1426,7 @@ function drawMarkers(s) {
 }
 function drawFrameLabel(s, fr, mom) {
   let lab = null, best = -1;
-  for (const e of s.ents) { if (e.dead || e.alpha < 0.5) continue; const c = e.c(); if (!inRect(c.x, c.y, fr)) continue; const pri = e.kind === 'target' ? 4 : e.kind === 'threat' ? 3 : e.kind === 'clue' ? 2 : 1; if (pri > best) { best = pri; lab = e; } }
+  for (const e of s.ents) { if (e.dead || e.alpha < 0.5) continue; const c = e.c(); if (!inRect(toScreenX(c.x), c.y, fr)) continue; const pri = e.kind === 'target' ? 4 : e.kind === 'threat' ? 3 : e.kind === 'clue' ? 2 : 1; if (pri > best) { best = pri; lab = e; } }
   if (!lab) return;
   const info = infoOf(lab); let txt, col;
   if (lab.kind === 'target') { txt = '★ ' + info.name + ' · target misi'; col = '#FFD98A'; }
@@ -1314,6 +1436,67 @@ function drawFrameLabel(s, fr, mom) {
   font(13, 700); const w = ctx.measureText(txt).width + 22; const lx = clamp(fr.x + fr.w / 2 - w / 2, 4, W - w - 4);
   const below = fr.y + fr.h + 36 < H; const ly = below ? fr.y + fr.h + 8 : fr.y - (mom ? 52 : 34);
   rrect(lx, ly, w, 24, 12); ctx.fillStyle = 'rgba(10,20,14,.82)'; ctx.fill(); text(txt, lx + w / 2, ly + 17, 13, col, 'center', 700);
+}
+// ===== Safari car art =====
+// First-person view from a rear seat of an open-sided safari car (canvas roof, rolled-up
+// side curtain, black roll bars). The car drives LEFT, so the front of the car is on the
+// left: the windscreen frame is at the far left. No seats are drawn, so the view stays clear.
+// Photos are taken before this is drawn.
+// CAR_STYLE picks the colours: 1 Klasik, 2 Ranger, 3 Desa.
+const CAR_STYLE = 1;
+const CAR_SKINS = {
+  1: { name: 'Klasik', body: '#7F8048', bodyD: '#5E5F33', bodyL: '#9C9D62', canvas: ['#D2C29A', '#BBAA7E', '#A39266'], bar: '#1C1D15', trim: '#2A2A1C', text: '#E9E2BE', stripe: null, label: 'SAFARI EKOWISATA DESA' },
+  2: { name: 'Ranger', body: '#B7A274', bodyD: '#8F7D53', bodyL: '#CDBB8E', canvas: ['#7C8458', '#646C44', '#4E5534'], bar: '#141410', trim: '#2A2418', text: '#4A3E26', stripe: null, label: 'JAGAWANA DESA' },
+  3: { name: 'Desa', body: '#3F7D57', bodyD: '#2D5E40', bodyL: '#5A9A70', canvas: ['#F3EBD5', '#E3D8BB', '#CDBF9E'], bar: '#202A24', trim: '#18221C', text: '#F6F0DA', stripe: '#C9573C', label: 'EKOWISATA DESA' }
+};
+// round metal tube with a highlight along one side
+function tube(x1, y1, x2, y2, w, col) {
+  seg(x1, y1, x2, y2, col, w);
+  const dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy) || 1, nx = -dy / l * w * .22, ny = dx / l * w * .22;
+  seg(x1 - nx, y1 - ny, x2 - nx, y2 - ny, 'rgba(255,255,255,.22)', Math.max(1, w * .22));
+}
+function drawSafariCar(t) {
+  const K = CAR_SKINS[CAR_STYLE] || CAR_SKINS[1];
+  const by = Math.sin(t * 11) * 1.4 + Math.sin(t * 3.3) * 0.8; // engine and road bounce
+  const ROLL = 60 + by, SILL = 462 + by;
+  const fp = y => 84 + (y - ROLL) * 0.05; // front pillar centre x (leans a little)
+  ctx.save();
+  // front of the car (left, open air): windscreen seen edge-on, with its frame
+  const wsTop = ROLL + 34, wsX0 = 4, wsX1 = 52;
+  ctx.fillStyle = 'rgba(200,225,235,.14)'; ctx.beginPath(); ctx.moveTo(0, wsTop); ctx.lineTo(wsX0, wsTop); ctx.lineTo(wsX1, SILL); ctx.lineTo(0, SILL); ctx.closePath(); ctx.fill();
+  tube(wsX0, wsTop, wsX1, SILL, 8, K.bar);
+  seg(0, wsTop, wsX0 + 2, wsTop, K.bar, 6);
+  // canvas roof seen from underneath, with its frame bars
+  ctx.fillStyle = lg(0, 0, 0, ROLL, [shade(K.canvas[2], -.3), shade(K.canvas[2], -.12)]); ctx.fillRect(0, 0, W, ROLL);
+  for (const x of [250, 530, 810]) tube(x, -4, x + 8, ROLL - 16, 7, K.bar);
+  { const g = ctx.createLinearGradient(0, ROLL, 0, ROLL + 46); g.addColorStop(0, 'rgba(0,0,0,.3)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, ROLL, W, 46); }
+  // rolled-up side curtain with straps
+  rrect(-12, ROLL - 20, W + 24, 30, 15); ctx.fillStyle = lg(0, ROLL - 20, 0, ROLL + 10, [K.canvas[0], K.canvas[1], K.canvas[2]]); ctx.fill();
+  if (K.stripe) { ctx.fillStyle = K.stripe; ctx.fillRect(0, ROLL - 8, W, 4); }
+  ctx.strokeStyle = 'rgba(60,48,28,.3)'; ctx.lineWidth = 1.2;
+  for (let x = 20; x < W; x += 46) { ctx.beginPath(); ctx.moveTo(x, ROLL - 15); ctx.quadraticCurveTo(x + 12, ROLL - 4, x + 4, ROLL + 6); ctx.stroke(); }
+  for (const x of [160, 420, 680, 880]) { ctx.fillStyle = K.trim; ctx.fillRect(x - 5, ROLL - 22, 10, 36); ctx.fillStyle = '#9C9480'; ctx.fillRect(x - 6, ROLL + 6, 12, 5); }
+  // front pillar (canvas covered) and its roll bar
+  ctx.fillStyle = K.canvas[1]; ctx.beginPath(); ctx.moveTo(fp(ROLL) - 14, ROLL); ctx.lineTo(fp(ROLL) + 14, ROLL); ctx.lineTo(fp(SILL) + 14, SILL); ctx.lineTo(fp(SILL) - 14, SILL); ctx.closePath(); ctx.fill();
+  seg(fp(ROLL) - 10, ROLL, fp(SILL) - 10, SILL, 'rgba(255,255,255,.2)', 2); seg(fp(ROLL) + 12, ROLL, fp(SILL) + 12, SILL, 'rgba(0,0,0,.25)', 3);
+  for (const y of [170, 330]) { ctx.fillStyle = K.trim; ctx.fillRect(fp(y + by) - 15, y + by, 30, 8); }
+  tube(fp(ROLL) + 20, ROLL, fp(SILL) + 20, SILL, 10, K.bar);
+  // rear roll bar and canvas corner (right)
+  tube(W - 64, ROLL, W - 60, SILL, 12, K.bar);
+  ctx.fillStyle = K.canvas[1]; ctx.fillRect(W - 50, ROLL, 50, SILL - ROLL); seg(W - 48, ROLL, W - 48, SILL, 'rgba(255,255,255,.2)', 2); seg(W - 26, ROLL, W - 26, SILL, 'rgba(60,48,28,.25)', 1.5);
+  // body side and the black side rail at the bottom
+  ctx.fillStyle = lg(0, SILL, 0, H, [K.bodyL, K.body, K.bodyD]); ctx.fillRect(0, SILL + 6, W, H - SILL);
+  seg(0, SILL + 8, W, SILL + 8, 'rgba(255,255,255,.2)', 1.5);
+  tube(0, SILL + 2, W, SILL + 2, 10, K.bar);
+  for (const x of [330, 640]) tube(x, SILL + 2, x, SILL + 30, 8, K.bar);
+  ctx.globalAlpha = .55; text(K.label, W * 0.48, H - 14, 14, K.text, 'center', 800); ctx.globalAlpha = 1;
+  // our own padded armrest along the window, bottom right
+  { const sy = 384 + by;
+    tube(770, sy + 96, 770, H + 10, 9, K.bar);
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; rrect(706, sy + 92, 280, 36, 18); ctx.fill();
+    rrect(700, sy + 84, 290, 36, 18); ctx.fillStyle = lg(0, sy + 84, 0, sy + 120, [K.canvas[0], K.canvas[2]]); ctx.fill();
+    seg(716, sy + 92, 960, sy + 92, 'rgba(255,255,255,.25)', 2); }
+  ctx.restore();
 }
 // ===== Session =====
 let SS = null;
@@ -1327,9 +1510,10 @@ function startSession(spot) {
   const guarantee = ok && !G.appearedEver && G.day >= 4;
   if (guarantee) p = 1;
   const tgt = Math.random() < p;
-  SS = { spot, L, t: 0, dur: 40, shots: 8, ents: [], nextSpawn: 2.5, tgtAt: tgt ? rnd(guarantee ? 5 : 7, guarantee ? 14 : 22) : -1, tgtSpawned: false,
+  SS = { spot, L, WL: null, X0: 0, t: 0, dur: 40, shots: 8, ents: [], nextSpawn: 2.5, tgtAt: tgt ? rnd(guarantee ? 5 : 7, guarantee ? 14 : 22) : -1, tgtSpawned: false,
     clueAt: (ok && spot.clue) ? rnd(5, 22) : -1, clueSpawned: false, evSignaled: false, evOn: false, ev: 0, flash: 0, last: null, lastT: 9,
-    parts: [], toasts: [], dayPhotos: [], dayClues: [], dayReports: [], sawTarget: false, gotTargetToday: false, ended: false, lastShotT: -9, pending: false };
+    parts: [], toasts: [], dayPhotos: [], dayClues: [], dayReports: [], sawTarget: false, gotTargetToday: false, ended: false, lastShotT: -9, pending: false, drive: 0 };
+  if (DRIVE_SPEED) { SS.WL = wideLayout(L, Math.ceil(DRIVE_SPEED * SS.dur)); SS.X0 = W - SS.WL.width; getLayers(SS.WL); }
   if (!G.reported[spot.id] && spot.threat) SS.ents.push(mkThreat(spot.threat, L));
   spawnAnimal(); spawnAnimal();
   G.visitLog.push({ id: spot.id, day: G.day }); G.screen = 'session'; startAmb(spot.layout);
@@ -1351,8 +1535,8 @@ function processShot() {
   const evMult = s.evOn ? 1.5 : 1;
   let best = null;
   for (const e of s.ents) {
-    if (e.dead || e.alpha < 0.5) continue; const c = e.c(); if (!inRect(c.x, c.y, fr)) continue;
-    const cen = 1 - clamp(Math.hypot(c.x - cx, c.y - cy) / hd, 0, 1); const info = infoOf(e); let q; let mom = false;
+    if (e.dead || e.alpha < 0.5) continue; const c = e.c(); const csx = toScreenX(c.x); if (!inRect(csx, c.y, fr)) continue;
+    const cen = 1 - clamp(Math.hypot(csx - cx, c.y - cy) / hd, 0, 1); const info = infoOf(e); let q; let mom = false;
     if (e.kind === 'animal' || e.kind === 'target') { mom = e.moment(); q = Math.round(100 * (0.45 * cen + 0.4 * (mom ? 1 : 0) + 0.15 * clar)); if (!mom) q = Math.min(q, 60); }
     else q = Math.round(100 * (0.7 * cen + 0.3 * clar));
     const score = Math.round(info.pts * (0.5 + q / 100) * evMult);
@@ -1382,26 +1566,27 @@ function processShot() {
   G.total += photo.score; G.photos.push(photo); s.dayPhotos.push(photo); s.last = photo; s.lastT = 0; s.flash = 1;
 }
 function updSession(dt) {
-  const s = SS; s.t += dt; const evStart = s.dur - 10;
+  const s = SS; s.t += dt; s.drive = DRIVE_SPEED * s.t; const evStart = s.dur - 10;
   if (!s.evSignaled && s.t >= evStart - 2.5) { s.evSignaled = true; toast(s.spot.event.sign, '#FFE7A3'); sfxSoft(); }
   if (!s.evOn && s.t >= evStart) { s.evOn = true; sfxChime(); spawnAnimal(); }
   s.ev = clamp((s.t - evStart) / 2.5, 0, 1);
   s.nextSpawn -= dt;
   const animals = s.ents.filter(e => e.kind === 'animal').length;
   if (s.nextSpawn <= 0) { if (animals < 3) spawnAnimal(); s.nextSpawn = rnd(3, 5); }
-  if (s.tgtAt >= 0 && !s.tgtSpawned && s.t >= s.tgtAt) { s.tgtSpawned = true; const bk = scaled(mkBekantan(s.L)); s.ents.push(bk); G.appearedEver = true; s.sawTarget = true; CALLS.bekantan(panOf(bk.x < 0 ? 0 : bk.x > W ? W : bk.x)); }
+  if (s.tgtAt >= 0 && !s.tgtSpawned && s.t >= s.tgtAt) { s.tgtSpawned = true; const bk = scaled(mkBekantan(s.L)); s.ents.push(bk); G.appearedEver = true; s.sawTarget = true; CALLS.bekantan(panOf(clamp(toScreenX(bk.x), 0, W))); }
   if (s.clueAt >= 0 && !s.clueSpawned && s.t >= s.clueAt) { s.clueSpawned = true; s.ents.push(mkClue(s.spot.clue, s.L)); }
-  for (const e of s.ents) { e.t += dt; e.upd(dt); if (e.kind === 'animal' || e.kind === 'target') { if (e.callT == null) e.callT = rnd(0.8, 4); e.callT -= dt; if (e.callT <= 0 && e.alpha > 0.5 && e.x > -20 && e.x < W + 20) { if (CALLS[e.type]) CALLS[e.type](panOf(e.x)); e.callT = rnd(5, 11); } } }
+  for (const e of s.ents) { e.t += dt; e.upd(dt); if (e.kind === 'animal' || e.kind === 'target') { if (e.callT == null) e.callT = rnd(0.8, 4); e.callT -= dt; if (e.callT <= 0 && e.alpha > 0.5 && !offScreen(e, 20)) { if (CALLS[e.type]) CALLS[e.type](panOf(clamp(toScreenX(e.x), 0, W))); e.callT = rnd(5, 11); } } }
   const fr = frameRect();
   for (const e of s.ents) {
     if (e.dead || (e.kind !== 'animal' && e.kind !== 'target')) continue;
     const sp = SPECIES[e.type]; if (!sp.shy || e.fleeing) continue;
     const c = e.c();
     const lim = e.kind === 'target' ? 5 : 3;
-    if (inRect(c.x, c.y, fr)) { e.aimT += dt; if (e.aimT > lim) { e.flee(); e.fleeing = true; e.alert = false; toast(sp.name + ' kabur, terlalu lama dibidik', '#FFB4A0'); if (CALLS[e.type]) CALLS[e.type](panOf(clamp(e.x, 0, W))); } }
+    if (inRect(toScreenX(c.x), c.y, fr)) { e.aimT += dt; if (e.aimT > lim) { e.flee(); e.fleeing = true; e.alert = false; toast(sp.name + ' kabur, terlalu lama dibidik', '#FFB4A0'); if (CALLS[e.type]) CALLS[e.type](panOf(clamp(toScreenX(e.x), 0, W))); } }
     else e.aimT = Math.max(0, e.aimT - dt * 1.5);
     e.alert = !e.fleeing && e.aimT > lim * 0.55;
   }
+  for (const e of s.ents) if (e.kind !== 'target' && toScreenX(e.x) > W + 260) e.dead = true;
   s.ents = s.ents.filter(e => !e.dead);
   s.parts = updParts(s.parts, s.L, dt, s.ev);
   if (Math.random() < dt * 0.25) chirp();
@@ -1417,15 +1602,21 @@ function endSession() {
 }
 function drawSession() {
   const s = SS; const L = s.L;
+  const bump = DRIVE_SPEED ? Math.sin(s.t * 11) * 0.9 + Math.sin(s.t * 3.3) * 0.6 : 0;
+  ctx.save(); ctx.translate(0, bump);
   drawScene(L, s.t, s.ev);
+  ctx.save(); ctx.translate(s.drive, 0);
   const order = s.ents.slice().sort((a, b) => (a.kind === 'threat' || a.kind === 'clue' ? -1 : 0) - (b.kind === 'threat' || b.kind === 'clue' ? -1 : 0));
   for (const e of order) { ctx.save(); ctx.globalAlpha = clamp(e.alpha, 0, 1); if (e.sc !== 1) { ctx.translate(e.x, e.y); ctx.scale(e.sc, e.sc); ctx.translate(-e.x, -e.y); } e.draw(); ctx.restore(); }
+  ctx.restore();
   drawParts(s.parts); drawForeground(L, s.t, s.ev); drawOverlay(L, s.t, s.ev);
+  ctx.restore();
   if (s.pending) { s.pending = false; processShot(); }
-  drawMarkers(s);
+  if (DRIVE_SPEED) drawSafariCar(s.t);
+  ctx.save(); ctx.translate(s.drive, bump); drawMarkers(s); ctx.restore();
   // viewfinder
   const fr = frameRect(); let mom = false, aiming = 0;
-  for (const e of s.ents) { if (e.kind !== 'animal' && e.kind !== 'target') continue; const c = e.c(); if (inRect(c.x, c.y, fr)) { if (e.moment()) mom = true; aiming = Math.max(aiming, e.aimT / (e.kind === 'target' ? 5 : 3)); } }
+  for (const e of s.ents) { if (e.kind !== 'animal' && e.kind !== 'target') continue; const c = e.c(); if (inRect(toScreenX(c.x), c.y, fr)) { if (e.moment()) mom = true; aiming = Math.max(aiming, e.aimT / (e.kind === 'target' ? 5 : 3)); } }
   ctx.fillStyle = 'rgba(0,0,0,.18)';
   ctx.fillRect(0, 0, W, fr.y); ctx.fillRect(0, fr.y + fr.h, W, H - fr.y - fr.h); ctx.fillRect(0, fr.y, fr.x, fr.h); ctx.fillRect(fr.x + fr.w, fr.y, W - fr.x - fr.w, fr.h);
   const col = mom ? '#FFD34D' : '#FFFFFF'; ctx.strokeStyle = col; ctx.lineWidth = mom ? 3.5 : 2.5; ctx.lineCap = 'square';
@@ -1455,6 +1646,7 @@ function drawSession() {
     text(tt.msg, W / 2, y - 2, 15, tt.col, 'center', 600); ctx.globalAlpha = 1;
   });
   if (s.t < 4 && G.day === 1) { const a = clamp(4 - s.t, 0, 1); ctx.globalAlpha = a; text('Gerakkan untuk membidik · klik atau Spasi untuk menjepret', W / 2, 120, 16, '#FFFFFF', 'center', 600); ctx.globalAlpha = 1; }
+  if (DRIVE_SPEED && s.t < 5) { const a = clamp(Math.min(s.t * 2, 5 - s.t), 0, 1); ctx.globalAlpha = a; text('Mobil safari berjalan pelan ke kiri. Jepret sebelum satwa terlewat!', W / 2, 146, 14, '#FFE7A3', 'center', 600); ctx.globalAlpha = 1; }
 }
 
 
