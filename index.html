@@ -280,17 +280,17 @@ const VILLAGER = {
   papua: 'Bakau kami luas, tapi monyet hidung panjang tidak hidup di Papua.'
 };
 const MISSIONS = [
-  { id: 'bekantan', name: 'Bekantan', latin: 'Nasalis larvatus', region: 'kalimantan', open: true, short: 'monyet hidung panjang',
+  { id: 'bekantan', name: 'Bekantan', latin: 'Nasalis larvatus', region: 'kalimantan', open: true, status: ['Terancam punah', '#F0A040'], short: 'monyet hidung panjang',
     brief: 'Desa butuh foto Bekantan untuk data konservasi. Monyet berhidung panjang ini hidup di hutan bakau dan tepi sungai, di pulau yang berbagi daratan dengan Malaysia dan Brunei.',
     hint: 'Katanya ia hidup di pulau yang berbagi daratan dengan Malaysia dan Brunei.', villager: VILLAGER,
     fact: 'Bekantan hanya hidup di Pulau Kalimantan dan bergantung pada hutan bakau serta hutan tepi sungai. Statusnya terancam punah (IUCN: Endangered). Setiap foto menjadi data, dan setiap laporan membantu desa menjaga habitatnya.' },
-  { id: 'badak', name: 'Badak Sumatra', latin: 'Dicerorhinus sumatrensis', region: 'sumatra', open: true, short: 'badak berbulu',
+  { id: 'badak', name: 'Badak Sumatra', latin: 'Dicerorhinus sumatrensis', region: 'sumatra', open: true, status: ['Kritis', '#E8584A'], short: 'badak berbulu',
     brief: 'Badak terkecil di dunia dan satu-satunya badak Asia yang berbulu. Ia sangat pemalu, berkubang di lumpur hutan dataran rendah dan rawa di pulau paling barat Indonesia.',
     hint: 'Katanya badak berbulu itu masih bertahan di hutan pulau paling barat Indonesia.',
     spotBase: { sum_gambut: 0.3, sum_hutan: 0.35, sum_bakau: 0.05, sum_muara: 0 }, clues: { sum_gambut: 'kubangan', sum_bakau: 'jejakbadak', sum_hutan: 'jejakbadak' },
     villager: { kalimantan: 'Dulu ada badak di pedalaman, tapi sekarang hampir tak pernah terlihat lagi di sini.', jawa: 'Di Jawa ada badak bercula satu, di ujung barat. Badak berbulu tidak ada di sini.' },
     fact: 'Badak Sumatra berstatus Kritis (IUCN: Critically Endangered). Di alam diperkirakan tinggal puluhan ekor saja. Ia butuh hutan yang utuh dan kubangan lumpur untuk menjaga kulitnya. Setiap foto dan laporan membantu desa menjaga hutan tempatnya bertahan.' },
-  { id: 'cendrawasih', name: 'Cendrawasih', latin: 'Paradisaea apoda', region: 'papua', open: true, short: 'burung surga berbulu kuning',
+  { id: 'cendrawasih', name: 'Cendrawasih', latin: 'Paradisaea apoda', region: 'papua', open: true, status: ['Dilindungi', '#7FC98A'], short: 'burung surga berbulu kuning',
     brief: 'Burung surga dengan bulu kuning keemasan yang panjang. Yang jantan menari di dahan tinggi sambil memamerkan bulunya. Ia hidup di hutan dataran rendah pulau besar di ujung timur Indonesia.',
     hint: 'Katanya burung surga itu hidup di pulau besar paling timur.',
     spotBase: { pap_hutan: 0.35, pap_sungai: 0.25, pap_bakau: 0.05, pap_muara: 0 }, clues: { pap_sungai: 'bulu', pap_bakau: 'buah', pap_hutan: 'buah' },
@@ -433,7 +433,7 @@ function tiledMirror(off, w, fn) {
 
 // ===== Entities =====
 function ent(o) { return Object.assign({ t: 0, alpha: 0, dead: false, aimT: 0, fleeing: false, kind: 'animal', f: 1, sc: 1 }, o); }
-const SCALE = { cendrawasih: 1.45, rangkong: 1.1, julang: 1.1 };
+const SCALE = { cendrawasih: 1.45, rangkong: 1.1, julang: 1.1, badak: 1.3 };
 function scaled(e) { e.sc = SCALE[e.type] || 1; const c0 = e.c; e.c = () => { const c = c0(); return { x: e.x + (c.x - e.x) * e.sc, y: e.y + (c.y - e.y) * e.sc }; }; return e; }
 function fadeIn(e, d) { if (e.t < d) e.alpha = e.t / d; else e.alpha = Math.max(e.alpha, 1); }
 
@@ -623,46 +623,128 @@ function infoOf(e) {
 }
 
 // ===== Mission targets & extra fauna =====
-// Badak Sumatra (Dicerorhinus sumatrensis): the smallest rhino, reddish-brown and hairy, two horns, a fold behind the shoulder.
-const RH = { skin: '#6E5244', skinD: '#4E382C', skinL: '#8E6E5A', hair: '#5A3E30', mud: '#7A6248', mudD: '#5E4A36', horn: '#C9B79A', hornD: '#9C8A70', eye: '#1A100A' };
+// Tapered capsule (smooth limb segment)
+function capsule(x0, y0, x1, y1, r0, r1, fill) { const a = Math.atan2(y1 - y0, x1 - x0); ctx.beginPath(); ctx.arc(x0, y0, r0, a + Math.PI / 2, a - Math.PI / 2); ctx.arc(x1, y1, r1, a - Math.PI / 2, a + Math.PI / 2); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); }
+function hsh(i) { const r = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return r - Math.floor(r); }
+// Badak Sumatra (Dicerorhinus sumatrensis): small, hairy, reddish-brown; two horns; a deep fold behind the shoulder;
+// pointed, hooked upper lip; dried mud on legs and belly from wallowing.
 function drawBadak(x, y, f, pose, t, look) {
   ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
-  const walk = pose === 'walk' || pose === 'trot', sp = pose === 'trot' ? 14 : 7, s = walk ? Math.sin(t * sp) : 0;
-  const graze = pose === 'graze', bob = walk ? Math.abs(Math.sin(t * sp)) * 1.5 : Math.sin(t * 1.4) * .5;
-  shadow(0, 2, 48);
-  const leg = (lx, ph, far) => { const sw = walk ? Math.sin(t * sp + ph) * 7 : 0, lift = walk ? Math.max(0, Math.sin(t * sp + ph + 1.6)) * 3 : 0; const c = far ? RH.skinD : RH.skin, fx = lx + sw * .5;
-    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(lx - 10, -34); ctx.bezierCurveTo(lx - 11, -20, fx - 7, -14, fx - 6, -3 - lift); ctx.lineTo(fx + 6, -3 - lift); ctx.bezierCurveTo(fx + 6, -14, lx + 10, -20, lx + 9, -34); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = far ? 'rgba(94,74,54,.8)' : 'rgba(122,98,72,.8)'; ctx.beginPath(); ctx.moveTo(fx - 7, -14 - lift); ctx.lineTo(fx + 7, -14 - lift); ctx.lineTo(fx + 6.5, -3 - lift); ctx.lineTo(fx - 6.5, -3 - lift); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#3A2A1E'; ctx.beginPath(); ctx.moveTo(fx - 7, -3 - lift); ctx.quadraticCurveTo(fx, -6 - lift, fx + 7, -3 - lift); ctx.lineTo(fx + 7, -lift); ctx.lineTo(fx - 7, -lift); ctx.closePath(); ctx.fill();
-    for (const d of [-4, 0, 4]) ell(fx + d, -1 - lift, 1.8, 1.2, '#8E7A62'); };
-  leg(-26, 1.6, true); leg(20, 0, true);
-  // body
-  ctx.fillStyle = lg(0, -64 - bob, 0, -18, [RH.skinL, RH.skin, RH.skinD]);
-  ctx.beginPath(); ctx.moveTo(-46, -34 - bob); ctx.bezierCurveTo(-50, -58 - bob, -20, -66 - bob, 8, -62 - bob); ctx.bezierCurveTo(30, -60 - bob, 40, -52 - bob, 40, -38 - bob);
-  ctx.bezierCurveTo(40, -24 - bob, 20, -18 - bob, -6, -18 - bob); ctx.bezierCurveTo(-30, -18 - bob, -46, -22 - bob, -46, -34 - bob); ctx.closePath(); ctx.fill();
-  // dried mud on the lower body and legs
-  ctx.fillStyle = 'rgba(122,98,72,.75)'; ctx.beginPath(); ctx.moveTo(-44, -30 - bob); ctx.quadraticCurveTo(-10, -22 - bob, 36, -32 - bob); ctx.quadraticCurveTo(34, -20 - bob, -6, -18 - bob); ctx.quadraticCurveTo(-36, -18 - bob, -44, -30 - bob); ctx.fill();
-  // skin fold behind the shoulder, hair
-  curve(16, -60 - bob, 12, -42 - bob, 18, -24 - bob, 2.2, RH.skinD);
-  ctx.strokeStyle = 'rgba(60,40,28,.5)'; ctx.lineWidth = 1; for (let i = 0; i < 14; i++) { const hx = -40 + i * 5.5; ctx.beginPath(); ctx.moveTo(hx, -60 - bob + Math.abs(hx) * .05); ctx.lineTo(hx - 1.5, -55 - bob + Math.abs(hx) * .05); ctx.stroke(); }
-  ell(-46, -40 - bob, 3, 7, RH.skinD); curve(-47, -38 - bob, -52, -32 - bob, -50, -24 - bob, 2.4, RH.hair);
-  leg(-18, 0, false); leg(28, 1.6, false);
-  // head
-  const hy = graze ? -22 : look ? -50 : -42, hx = graze ? 56 : 52;
-  ctx.save(); ctx.translate(36, -46 - bob); ctx.rotate(graze ? .5 : look ? -.12 : .05);
-  ctx.fillStyle = lg(0, -14, 0, 16, [RH.skinL, RH.skin, RH.skinD]);
-  ctx.beginPath(); ctx.moveTo(-4, -12); ctx.bezierCurveTo(10, -16, 24, -10, 30, 0); ctx.bezierCurveTo(32, 8, 28, 14, 20, 14); ctx.bezierCurveTo(10, 15, 0, 12, -6, 8); ctx.closePath(); ctx.fill();
-  // horns: larger front, small rear
-  ctx.fillStyle = RH.horn; ctx.beginPath(); ctx.moveTo(22, -4); ctx.quadraticCurveTo(26, -18, 32, -24); ctx.quadraticCurveTo(30, -12, 30, -2); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = RH.hornD; ctx.beginPath(); ctx.moveTo(12, -11); ctx.quadraticCurveTo(14, -17, 17, -19); ctx.quadraticCurveTo(17, -13, 18, -10); ctx.closePath(); ctx.fill();
-  ell(29, 9, 3, 2, RH.skinD); seg(22, 12, 29, 11, RH.skinD, 1.2);
-  ell(8, -4, 1.8, 1.8, RH.eye); ell(8.5, -4.6, .6, .6, '#fff'); curve(5, -6, 8, -8, 11, -6, 1, RH.skinD);
-  // ears with hair fringe; they flick
-  const ear = Math.sin(t * 3) > .9 ? -.4 : 0;
-  ctx.save(); ctx.translate(-2, -12); ctx.rotate(-.5 + ear); ell(0, -6, 3.6, 7, RH.skin); ell(0, -6, 2, 5, RH.skinD); ctx.strokeStyle = RH.hair; ctx.lineWidth = .9; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i, -12); ctx.lineTo(i * 1.6, -16); ctx.stroke(); } ctx.restore();
-  if (look) { ctx.save(); ctx.translate(3, -12); ctx.rotate(.3); ell(0, -6, 3.4, 6.6, RH.skin); ctx.restore(); }
+  const walk = pose === 'walk' || pose === 'trot', sp = pose === 'trot' ? 13 : 6.5, graze = pose === 'graze';
+  const bob = walk ? Math.abs(Math.sin(t * sp)) * 1.4 : Math.sin(t * 1.3) * .5, br = Math.sin(t * 1.6) * .6;
+  shadow(-2, 2, 52);
+  const leg = (hx, hy, ph, far, hind) => {
+    const sw = walk ? Math.sin(t * sp + ph) * 6 : 0, lift = walk ? Math.max(0, Math.sin(t * sp + ph + 1.6)) * 3 : 0, fx = hx + sw, top = hy - bob;
+    const c0 = far ? '#4E382C' : '#735646', c1 = far ? '#3A2820' : '#523A2E';
+    ctx.fillStyle = lg(hx - 11, 0, hx + 11, 0, [c1, c0, c1]); ctx.beginPath();
+    if (hind) { ctx.moveTo(hx - 14, top); ctx.bezierCurveTo(hx - 15, top + 14, fx - 6, -17, fx - 7, -4 - lift); ctx.lineTo(fx + 6.5, -4 - lift); ctx.bezierCurveTo(fx + 7, -15, hx + 11, top + 8, hx + 11, top - 2); }
+    else { ctx.moveTo(hx - 10, top); ctx.bezierCurveTo(hx - 10, top + 14, fx - 7, -15, fx - 7, -4 - lift); ctx.lineTo(fx + 7, -4 - lift); ctx.bezierCurveTo(fx + 7, -15, hx + 11, top + 14, hx + 11, top - 2); }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(28,16,10,.35)'; ctx.lineWidth = .9;
+    for (let i = 0; i < 3; i++) { const yy = -20 + i * 3.2; ctx.beginPath(); ctx.moveTo(fx - 6, yy - lift * .3); ctx.quadraticCurveTo(fx + .5, yy + 1.6 - lift * .3, fx + 6.5, yy - lift * .3); ctx.stroke(); }
+    ctx.fillStyle = far ? 'rgba(96,76,54,.8)' : 'rgba(138,112,82,.82)'; ctx.beginPath(); ctx.moveTo(fx - 7.3, -12 - lift + (hsh(hx) - .5) * 3); ctx.quadraticCurveTo(fx, -16 - lift, fx + 7.3, -11 - lift); ctx.lineTo(fx + 7, -4 - lift); ctx.lineTo(fx - 7, -4 - lift); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2E2018'; ctx.beginPath(); ctx.moveTo(fx - 8.5, -4 - lift); ctx.quadraticCurveTo(fx, -7 - lift, fx + 8.5, -4 - lift); ctx.lineTo(fx + 9, -lift); ctx.lineTo(fx - 9, -lift); ctx.closePath(); ctx.fill();
+    for (const d of [-5.5, 0, 5.5]) ellG(fx + d, -1.3 - lift, 2.3, 1.6, 0, '#A8977C');
+  };
+  leg(-30, -36, 1.6, true, true); leg(26, -34, 0, true, false);
+  leg(-22, -36, 0, false, true); leg(18, -34, 1.6, false, false);
+  ctx.save(); ctx.translate(0, -bob);
+  // tail with a hair tuft
+  curve(-50, -46, -57, -38, -54, -27, 3, '#4E382C'); for (let i = 0; i < 5; i++) seg(-54, -29, -56 + i * 1.2, -22 + (i % 2), '#3A2820', 1);
+  const body = new Path2D();
+  body.moveTo(-50, -42); body.bezierCurveTo(-53, -58, -37, -64, -18, -62); body.bezierCurveTo(-4, -60, 4, -68, 18, -67);
+  body.bezierCurveTo(30, -66, 38, -61, 42, -53); body.bezierCurveTo(46, -44, 44, -34, 38, -30); body.bezierCurveTo(30, -24, 14, -22 + br, 0, -23 + br);
+  body.bezierCurveTo(-18, -22 + br, -34, -22, -44, -28); body.bezierCurveTo(-50, -32, -51, -36, -50, -42);
+  ctx.fillStyle = lg(0, -68, 0, -22, ['#957560', '#71533F', '#4E382C']); ctx.fill(body);
+  ctx.save(); ctx.clip(body);
+  // rounded muscle highlights at the shoulder and haunch
+  for (const [hx, hy, r] of [[16, -50, 22], [-34, -48, 20]]) { const g = ctx.createRadialGradient(hx - 6, hy - 6, 2, hx, hy, r); g.addColorStop(0, 'rgba(255,214,170,.22)'); g.addColorStop(1, 'rgba(255,214,170,0)'); ctx.fillStyle = g; ctx.fillRect(hx - r, hy - r, r * 2, r * 2); }
+  // dried mud on the belly
+  ctx.fillStyle = 'rgba(132,106,76,.78)'; ctx.beginPath(); ctx.moveTo(-60, -33); for (let xx = -60; xx <= 52; xx += 8) ctx.lineTo(xx, -33 + Math.sin(xx * .31) * 2.4 + (hsh(xx) - .5) * 2.4); ctx.lineTo(52, -10); ctx.lineTo(-60, -10); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(30,18,10,.25)'; ctx.fillRect(-60, -27, 120, 10);
+  // coarse hair
+  ctx.strokeStyle = 'rgba(48,30,20,.32)'; ctx.lineWidth = .7;
+  for (let i = 0; i < 70; i++) { const hx = -50 + hsh(i) * 94, hy = -66 + hsh(i + 50) * 40; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx - 1.6, hy + 3.4); ctx.stroke(); }
   ctx.restore();
-  if (graze) { for (let i = 0; i < 4; i++) seg(hx + 10 + i * 3, 2, hx + 9 + i * 3, -6 - (i % 2) * 3, '#6E9A44', 1.4); }
+  // rim light along the back
+  ctx.strokeStyle = 'rgba(255,224,186,.28)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-48, -52); ctx.bezierCurveTo(-44, -60, -32, -62, -18, -60.5); ctx.bezierCurveTo(-4, -58.5, 4, -66, 18, -65.5); ctx.bezierCurveTo(28, -65, 34, -61, 38, -56); ctx.stroke();
+  // skin folds: behind the shoulder (the deep one), flank, neck
+  curve(12, -66, 5, -46, 12, -24, 2.6, '#3E2A20'); curve(14.5, -65, 8, -46, 14.5, -25, 1.2, 'rgba(255,214,170,.3)');
+  curve(-25, -62, -31, -45, -26, -25, 1.6, 'rgba(46,30,22,.6)');
+  curve(33, -62, 30, -48, 33, -33, 1.4, 'rgba(46,30,22,.55)'); curve(37, -59, 35.5, -47, 38, -36, 1.1, 'rgba(46,30,22,.45)');
+  // head
+  const hr = graze ? .55 : look ? -.14 + Math.sin(t * 1.1) * .03 : .06 + Math.sin(t * .9) * .02;
+  ctx.save(); ctx.translate(38, -50); ctx.rotate(hr);
+  const ear = Math.sin(t * 3.1) > .92 ? -.45 : 0;
+  ctx.save(); ctx.translate(-1, -11); ctx.rotate(-.55 + ear);
+  ctx.fillStyle = '#5E4434'; ctx.beginPath(); ctx.ellipse(0, -7, 4, 8, 0, 0, PI2); ctx.fill(); ellG(.6, -6, 2.2, 5.6, 0, '#3A2820');
+  ctx.strokeStyle = '#3E2A1E'; ctx.lineWidth = 1; ctx.lineWidth = .7; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * .9, -14); ctx.quadraticCurveTo(i * 1.4, -16, i * 1.6 - 1, -17.5 + Math.abs(i) * .4); ctx.stroke(); }
+  ctx.restore();
+  const head = new Path2D();
+  head.moveTo(-6, -12); head.bezierCurveTo(4, -17, 20, -15, 30, -8); head.bezierCurveTo(36, -4, 40, 2, 41, 7); head.quadraticCurveTo(42.5, 11.5, 38, 12.5);
+  head.bezierCurveTo(34, 12.5, 33, 14, 30, 15); head.bezierCurveTo(22, 17.5, 10, 16.5, 2, 12.5); head.bezierCurveTo(-6, 8, -9, -4, -6, -12);
+  ctx.fillStyle = lg(0, -16, 0, 17, ['#957560', '#71533F', '#523A2E']); ctx.fill(head);
+  ctx.save(); ctx.clip(head); ctx.fillStyle = 'rgba(132,106,76,.55)'; ctx.fillRect(-10, 11, 60, 10); ctx.restore();
+  for (let i = 0; i < 3; i++) curve(2 + i * 4, -9 + i, 0 + i * 4, 2, 4 + i * 4, 12, .9, 'rgba(46,30,22,.4)');
+  // horns: front larger, rear smaller
+  ctx.fillStyle = lg(26, -28, 36, -2, ['#E2D4B6', '#B8A486', '#8E7A60']); ctx.beginPath(); ctx.moveTo(25, -9); ctx.quadraticCurveTo(29, -20, 34, -28); ctx.quadraticCurveTo(37, -15, 37.5, -3); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,250,235,.45)'; ctx.lineWidth = .9; ctx.beginPath(); ctx.moveTo(27, -10); ctx.quadraticCurveTo(30, -19, 33.5, -26); ctx.stroke();
+  ctx.fillStyle = lg(14, -22, 22, -12, ['#C8B696', '#9C8A70']); ctx.beginPath(); ctx.moveTo(13, -14); ctx.quadraticCurveTo(16, -20, 19.5, -23); ctx.quadraticCurveTo(21, -18, 22, -12.5); ctx.closePath(); ctx.fill();
+  // eye with wrinkles, nostril, hooked lip, mouth
+  curve(7, -7.5, 11, -10, 15, -7, 1, 'rgba(40,26,18,.55)'); curve(8, -2, 11, -.5, 15, -2.5, .8, 'rgba(40,26,18,.4)');
+  ellG(11, -4.6, 2, 1.8, 0, '#1A100A'); ellG(11.6, -5.2, .7, .7, 0, 'rgba(255,255,255,.85)');
+  ellG(37, 4, 2.4, 1.5, -.6, '#2A1A12'); curve(30, 14.5, 34, 12, 38.5, 12, 1.1, '#2A1A12');
+  ctx.restore();
+  if (graze) { ctx.save(); ctx.translate(38, -50); ctx.rotate(hr); for (let i = 0; i < 5; i++) curve(36 + i * 2.6, 22, 37 + i * 2.6, 17, 35 + i * 3, 11 - (i % 2) * 3, 1.3, i % 2 ? '#6E9A44' : '#8CB858'); ctx.restore(); }
+  ctx.restore();
+  ctx.restore();
+}
+// Cendrawasih kuning-besar (Paradisaea apoda), male: chestnut-maroon body, yellow crown and nape, dark emerald face and throat,
+// blue-grey bill, long golden flank plumes (raised over the back in display), two long tail wires.
+function cwPlumes(bx, by, a0, a1, len, n, cv, t, shiv) {
+  for (let i = 0; i < n; i++) {
+    const k = n > 1 ? i / (n - 1) : .5, a = lerp(a0, a1, k), l = len * (.78 + .22 * Math.sin(Math.PI * k)) * (.92 + hsh(i) * .14);
+    const nx = -Math.sin(a), ny = Math.cos(a), wob = Math.sin(t * 2.4 + i * .9) * shiv;
+    const ex = bx + Math.cos(a) * l + nx * (cv * l + wob), ey = by + Math.sin(a) * l + ny * (cv * l + wob);
+    const mx = bx + Math.cos(a) * l * .55 + nx * cv * l * .7, my = by + Math.sin(a) * l * .55 + ny * cv * l * .7;
+    const g = ctx.createLinearGradient(bx, by, ex, ey); g.addColorStop(0, '#D8901A'); g.addColorStop(.3, '#F5C83A'); g.addColorStop(.72, '#FBE79A'); g.addColorStop(1, 'rgba(255,250,228,.25)');
+    const w = 2.6 + (1 - Math.abs(k - .5) * 2) * 1.2;
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(bx + nx * w * .4, by + ny * w * .4); ctx.quadraticCurveTo(mx + nx * w, my + ny * w, ex, ey); ctx.quadraticCurveTo(mx - nx * w, my - ny * w, bx - nx * w * .4, by - ny * w * .4); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,248,214,.45)'; ctx.lineWidth = .5;
+    for (let j = 0; j < 4; j++) { const q = .45 + j * .13, px = lerp(bx, ex, q) + nx * cv * l * .5 * Math.sin(Math.PI * q), py = lerp(by, ey, q) + ny * cv * l * .5 * Math.sin(Math.PI * q), s = j % 2 ? 1 : -1; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + nx * 4 * s + Math.cos(a) * 3, py + ny * 4 * s + Math.sin(a) * 3); ctx.stroke(); }
+  }
+}
+function drawCendrawasih(x, y, f, pose, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const disp = pose === 'display', fly = pose === 'fly', shiv = disp ? 1.6 : .6, bob = disp ? Math.sin(t * 5) * 1.2 : Math.sin(t * 1.6) * .4;
+  if (!fly) { shadow(0, 1.5, 8); ctx.strokeStyle = '#8A9CB2'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; for (const lx of [-2, 3]) { ctx.beginPath(); ctx.moveTo(lx, -7); ctx.lineTo(lx - .5, -.5); ctx.stroke(); seg(lx - .5, -.5, lx + 2.5, .5, '#8A9CB2', 1.1); } }
+  ctx.save(); ctx.translate(0, -12 + bob); ctx.rotate(disp ? .42 : fly ? -.25 : -.12);
+  // tail wires
+  ctx.strokeStyle = '#2A1A10'; ctx.lineWidth = .9;
+  for (const [ox, oy, dy] of [[-36, 18, 0], [-28, 24, 1.3]]) { ctx.beginPath(); ctx.moveTo(-9, 1); ctx.bezierCurveTo(-24, 4, ox, oy * .4, ox + 4, oy + 10 + Math.sin(t * 1.7 + dy) * 2.5); ctx.stroke(); }
+  // plumes behind the body
+  if (disp) cwPlumes(-5, -1, -Math.PI * .92, -Math.PI * .38, 44, 13, -.18, t, shiv);
+  else if (fly) cwPlumes(-6, 1, Math.PI * .96, Math.PI * 1.06, 36, 8, .05, t, shiv);
+  else cwPlumes(-6, 2, Math.PI * .78, Math.PI * .92, 40, 10, .1, t, shiv);
+  // body
+  const bodyP = new Path2D(); bodyP.moveTo(-11, 1); bodyP.bezierCurveTo(-12, -7, -4, -10, 4, -9); bodyP.bezierCurveTo(10, -8, 13, -3, 12, 2); bodyP.bezierCurveTo(10, 8, 0, 9, -6, 6); bodyP.closePath();
+  ctx.fillStyle = lg(0, -10, 0, 9, ['#8A4A2A', '#6A3420', '#3E1C10']); ctx.fill(bodyP);
+  ell(8, 2, 5, 4.4, '#3A1E14');
+  // wing
+  const wa = fly ? Math.sin(t * 16) * .9 : disp ? -1.25 + Math.sin(t * 7) * .12 : .05;
+  ctx.save(); ctx.translate(1, -5); ctx.rotate(wa);
+  ctx.fillStyle = lg(-14, 0, 4, 0, ['#3E1E12', '#5E2E1A', '#7A3E22']); ctx.beginPath(); ctx.moveTo(4, -1); ctx.bezierCurveTo(-2, -5, -12, -4, -17, 2); ctx.bezierCurveTo(-11, 5, -3, 5, 4, 3); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(30,14,8,.6)'; ctx.lineWidth = .7; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(-6 - i * 2.6, 3.4); ctx.lineTo(-9 - i * 2.4, -1 + i * .6); ctx.stroke(); }
+  ctx.restore();
+  // head: yellow crown and nape, emerald face and throat
+  ctx.save(); ctx.translate(10, -7);
+  ctx.fillStyle = lg(-4, -7, 4, 4, ['#FBE26A', '#F2C838', '#D8A426']); ctx.beginPath(); ctx.ellipse(0, -2, 6.4, 6, 0, 0, PI2); ctx.fill();
+  ctx.fillStyle = lg(2, -4, 6, 6, ['#2E7A52', '#1A4E36', '#123A28']); ctx.beginPath(); ctx.moveTo(1, -4.5); ctx.quadraticCurveTo(7, -4, 6.6, 1); ctx.quadraticCurveTo(5, 6, -1, 5.5); ctx.quadraticCurveTo(1, 1, 1, -4.5); ctx.closePath(); ctx.fill();
+  ellG(4.4, .6, 1.8, 1.4, .3, 'rgba(90,220,150,.55)');
+  ctx.fillStyle = lg(5, -3, 13, 0, ['#B8CADA', '#8EA4BA']); ctx.beginPath(); ctx.moveTo(5.6, -3.4); ctx.quadraticCurveTo(11, -2.6, 13.4, -.6); ctx.quadraticCurveTo(10, .4, 5.8, .2); ctx.closePath(); ctx.fill();
+  ellG(3.3, -2.6, 1.5, 1.5, 0, '#F2E68A'); ellG(3.5, -2.6, .75, .75, 0, '#140C06'); ellG(3.1, -3, .35, .35, 0, '#fff');
+  ctx.restore();
+  ctx.restore();
   ctx.restore();
 }
 function mkBadak(L) {
@@ -683,31 +765,6 @@ function mkBadak(L) {
   e.c = () => ({ x: e.x + e.f * 10, y: e.y - 40 });
   e.draw = () => drawBadak(e.x, e.y, e.f, e.pose(), e.t, e.moment() || e.alert);
   return e;
-}
-// Cendrawasih kuning-besar (Paradisaea apoda): maroon-brown body, yellow crown, emerald throat, golden flank plumes, two tail wires.
-function drawCendrawasih(x, y, f, pose, t, k) {
-  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
-  const disp = pose === 'display', fly = pose === 'fly', shiv = disp ? Math.sin(t * 22) * 1.2 : 0, bob = disp ? Math.sin(t * 6) * 2 : 0;
-  const plume = (ang, len, spread) => { for (let i = 0; i < 9; i++) { const a = ang + (i - 4) * spread, l = len * (.8 + (i % 3) * .1);
-    const ex = Math.cos(a) * l, ey = Math.sin(a) * l; ctx.strokeStyle = i % 2 ? '#F6D24A' : '#FBE58A'; ctx.lineWidth = 2.6 - i * .12; ctx.beginPath(); ctx.moveTo(-6, -14 + bob); ctx.quadraticCurveTo(ex * .5 - 4, ey * .5 - 10 + bob + shiv, ex - 6, ey - 12 + bob + shiv); ctx.stroke();
-    ell(ex - 6, ey - 12 + bob + shiv, 2, 1.2, 'rgba(255,250,225,.8)', a); } };
-  if (!fly) { seg(-2, -2, -3, 2, '#7A8AA0', 1.6); seg(3, -2, 3, 2, '#7A8AA0', 1.6); shadow(0, 2, 8); }
-  // tail wires
-  ctx.strokeStyle = '#3A2418'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10, -10 + bob); ctx.bezierCurveTo(-30, -4, -44, 10, -40, 30 + Math.sin(t * 2) * 3); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-10, -9 + bob); ctx.bezierCurveTo(-26, 2, -32, 18, -26, 34 + Math.sin(t * 2 + 1) * 3); ctx.stroke();
-  if (disp) plume(-Math.PI / 2 - .75, 46, .12); else if (!fly) plume(Math.PI * .86, 40, .05); else plume(Math.PI * .95, 34, .04);
-  // body
-  ctx.save(); ctx.translate(0, bob); ctx.rotate(disp ? -.35 : fly ? -.2 : -.1);
-  ell(-2, -14, 11, 8, '#5A2E1E'); ell(0, -15, 10, 7, '#6E3A24'); ell(-4, -12, 7, 4, '#4E2818');
-  // wing: forward and raised in display, flapping in flight
-  const wa = fly ? Math.sin(t * 18) * .9 : disp ? -1.1 + Math.sin(t * 8) * .15 : 0;
-  ctx.save(); ctx.translate(-2, -17); ctx.rotate(wa); ctx.fillStyle = '#4A2416'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-12, -4, -18, 4); ctx.quadraticCurveTo(-8, 6, 0, 4); ctx.closePath(); ctx.fill(); ctx.restore();
-  // head: yellow crown & nape, emerald throat, blue-grey bill
-  ell(9, -23, 6.5, 6, '#F2D34A'); ell(11, -19, 5, 4, '#1E7A4E'); ell(12, -18, 3, 2.4, '#34A86A');
-  ctx.fillStyle = '#9CB2C8'; ctx.beginPath(); ctx.moveTo(14, -23); ctx.lineTo(21, -21); ctx.lineTo(14, -20); ctx.closePath(); ctx.fill();
-  ell(12, -24, 1.4, 1.4, '#F6E070'); ell(12.2, -24, .7, .7, '#1A100A');
-  ctx.restore();
-  ctx.restore();
 }
 function mkCendrawasih(L) {
   const vp = perchesIn(L, viewL() + 60, viewL() + W * .55); const p = vp.length ? vp[vp.length - 1] : { x: viewL() + W * .35, y: branchYW(L, viewL() + W * .35) };
@@ -932,10 +989,15 @@ function drawBekantan(x, y, f, pose, front, t) {
   } else {
     shadow(2, 0, 22);
     curve(-12, -16, -26, 14, -18 + sway, 54, 7, BK.limbD); curve(-12, -16, -25, 13, -17 + sway, 53, 4, BK.limb);
-    ell(-6, -10, 11, 8, BK.limbD); ell(-2, -2, 9, 3.2, BK.limbD);
+    { const L0 = BK.line; capsule(-10, -11, 4, -18, 8.6, 6.6, L0); capsule(4, -18, 3, -4, 5.8, 4.6, L0);
+      capsule(-10, -11, 4, -18, 7.8, 5.8, BK.limbD); capsule(4, -18, 3, -4, 5, 3.8, BK.limbD); capsule(0, -2, 10, -1.5, 3.4, 2.6, BK.limbD); }
     bkBody(-1, -31, 18, 23 + breath * .6, -0.12);
     ell(6, -22, 11.5 + breath * .5, 13.5 + breath * .4, BK.belly); ell(8, -19, 7, 8, 'rgba(255,243,220,.55)');
-    ell(4, -11, 13, 8.5, BK.limb); ell(12, -2, 9.5, 3.4, BK.limb); ell(3, -14, 9, 3.5, 'rgba(255,255,255,.35)');
+    { const g = lg(0, -24, 0, 0, [BK.limb, BK.limb, BK.limbD]);
+      capsule(-4, -10, 14, -17, 9.6, 7.6, BK.line); capsule(14, -17, 13, -3, 6.8, 5.4, BK.line);
+      capsule(-4, -10, 14, -17, 8.8, 6.8, g); capsule(14, -17, 13, -3, 6, 4.6, g);
+      capsule(10, -2, 22, -1.4, 4, 3, BK.limb); for (const d of [0, 2.6, 5.2]) ellG(21 + d * .3, -1.4 + d * .2, 1.4, 1.1, 0, BK.limbD);
+      curve(-2, -16, 6, -20, 13, -21, 1.6, 'rgba(255,255,255,.4)'); curve(10, -13, 12, -10, 11, -6, 1, 'rgba(150,130,110,.35)'); }
     ell(6, -45, 14, 7.5, BK.ruff, -0.2);
     const chew = Math.sin(t * 7) * 1.2;
     if (front) { curve(4, -40, 14, -32, 12, -44, 6, BK.limb); ell(12, -46, 4, 3, BK.limb); ell(15, -49, 6, 3, '#5E9E4A', -0.7); bkHeadFront(2, -58 + bob); }
@@ -2221,29 +2283,66 @@ function drawHowto() {
   let y = 150; for (const l of lines) { ell(206, y - 6, 4, 4, '#E07A3F'); y = wrapText(l, 222, y, 530, 22, 16, '#2D3A31', 400) + 34; }
   button(610, 418, 150, 44, 'Mengerti', () => { G.howto = false; }, { primary: true });
 }
+// Per-mission card art: a small habitat scene behind each animal.
+function drawMissionArt(m, x, y, w, h, t) {
+  ctx.save(); rrect(x, y, w, h, 10); ctx.clip();
+  if (m.id === 'bekantan') {
+    ctx.fillStyle = lg(0, y, 0, y + h, ['#7A5C8E', '#D9876E', '#F3B37E', '#F8D8A6']); ctx.fillRect(x, y, w, h);
+    ellG(x + w * .78, y + h * .52, 18, 18, 0, 'rgba(255,240,200,.85)');
+    ctx.fillStyle = '#7E6A7E'; ctx.beginPath(); ctx.moveTo(x, y + h * .62); for (let i = 0; i <= 12; i++) ctx.lineTo(x + w * i / 12, y + h * .6 - Math.sin(i * 1.3) * 5 - hsh(i) * 6); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.fill();
+    ctx.fillStyle = '#4E5A4E'; for (let i = 0; i < 9; i++) ellG(x + i * w / 8, y + h * .7, 16, 12, 0, '#4E5A4E');
+    ctx.fillStyle = lg(0, y + h * .74, 0, y + h, ['#5E8C90', '#3E6A70']); ctx.fillRect(x, y + h * .74, w, h);
+    for (let i = 0; i < 6; i++) ellG(x + w * .78 + (i - 3) * 6, y + h * .78 + i * 5, 14 - i * 1.5, 1, 0, 'rgba(255,226,180,.45)');
+    ctx.fillStyle = '#4E3A2A'; ctx.beginPath(); ctx.moveTo(x - 4, y + h * .7); ctx.quadraticCurveTo(x + w * .5, y + h * .66, x + w + 4, y + h * .74); ctx.lineTo(x + w + 4, y + h * .74 + 9); ctx.quadraticCurveTo(x + w * .5, y + h * .7 + 8, x - 4, y + h * .7 + 8); ctx.fill();
+    leafBlob(x + 18, y + 14, 30, ['#24452C', '#35603A', '#5E8C52'], mulberry(3)); leafBlob(x + w - 10, y + 6, 26, ['#24452C', '#35603A', '#5E8C52'], mulberry(4));
+    ctx.save(); ctx.translate(x + w * .46, y + h * .7 + 2); ctx.scale(1.5, 1.5); drawBekantan(0, 0, 1, 'sit', Math.sin(t * .7) > 0, t); ctx.restore();
+  } else if (m.id === 'badak') {
+    ctx.fillStyle = lg(0, y, 0, y + h, ['#B8DCCE', '#DCEBD8', '#EEF2E0']); ctx.fillRect(x, y, w, h);
+    for (let i = 0; i < 5; i++) { const g = ctx.createLinearGradient(0, y, 0, y + h); ctx.fillStyle = 'rgba(255,250,220,.16)'; ctx.beginPath(); ctx.moveTo(x + 20 + i * 40, y); ctx.lineTo(x + 40 + i * 40, y); ctx.lineTo(x + i * 46 - 10, y + h); ctx.lineTo(x + i * 46 - 34, y + h); ctx.fill(); }
+    for (const [cy, col, n] of [[.42, '#A8C6B0', 7], [.52, '#7FA488', 8], [.62, '#5E8A64', 9]]) for (let i = 0; i <= n; i++) ellG(x + i * w / n, y + h * cy, w / n * .8, 16, 0, col);
+    ctx.fillStyle = '#5E8A64'; ctx.fillRect(x, y + h * .62, w, h * .12);
+    ctx.fillStyle = lg(0, y + h * .72, 0, y + h, ['#7A6448', '#5E4A34']); ctx.fillRect(x, y + h * .72, w, h);
+    ellG(x + w * .5, y + h * .92, w * .42, 10, 0, '#4E3C2A'); ellG(x + w * .46, y + h * .91, w * .3, 6, 0, 'rgba(160,180,180,.5)');
+    for (const fx of [x + 10, x + w - 14]) for (let k = 0; k < 5; k++) curve(fx, y + h * .78, fx + (k - 2) * 8, y + h * .6, fx + (k - 2) * 14, y + h * .64 + Math.abs(k - 2) * 6, 2, k % 2 ? '#3E6E3A' : '#4E8244');
+    ctx.save(); ctx.translate(x + w * .44, y + h * .9); ctx.scale(1.12, 1.12); drawBadak(0, 0, 1, Math.sin(t * .5) > .6 ? 'graze' : 'stand', t, Math.sin(t * .5) <= .6); ctx.restore();
+  } else {
+    ctx.fillStyle = lg(0, y, 0, y + h, ['#6FB4D4', '#A8D8E2', '#DDEFE2']); ctx.fillRect(x, y, w, h);
+    ctx.save(); ctx.globalCompositeOperation = 'screen'; for (let i = 0; i < 4; i++) { ctx.fillStyle = 'rgba(255,248,210,.14)'; ctx.beginPath(); ctx.moveTo(x + w * .2 + i * 30, y); ctx.lineTo(x + w * .2 + i * 30 + 18, y); ctx.lineTo(x + w * .6 + i * 40, y + h); ctx.lineTo(x + w * .6 + i * 40 - 30, y + h); ctx.fill(); } ctx.restore();
+    for (let i = 0; i <= 8; i++) ellG(x + i * w / 8, y + h * .9, 20, 22, 0, '#7FAE88');
+    const R = mulberry(9); leafBlob(x + 6, y + 10, 34, ['#1E4A2C', '#2E6A3A', '#5E9A52'], R); leafBlob(x + w - 6, y + 20, 30, ['#1E4A2C', '#2E6A3A', '#5E9A52'], R); leafBlob(x + w * .25, y - 6, 26, ['#24502E', '#357040', '#6EA458'], R);
+    ctx.fillStyle = '#4E3A2A'; ctx.beginPath(); ctx.moveTo(x - 4, y + h * .66); ctx.quadraticCurveTo(x + w * .45, y + h * .6, x + w + 4, y + h * .62); ctx.lineTo(x + w + 4, y + h * .62 + 7); ctx.quadraticCurveTo(x + w * .45, y + h * .6 + 8, x - 4, y + h * .66 + 8); ctx.fill();
+    for (const lx of [x + 30, x + w - 40]) leafBlob(lx, y + h * .6, 14, ['#24502E', '#357040', '#6EA458'], R);
+    ctx.save(); ctx.translate(x + w * .56, y + h * .62); ctx.scale(2.3, 2.3); drawCendrawasih(0, 0, 1, Math.sin(t * .6) > -.3 ? 'display' : 'sit', t); ctx.restore();
+  }
+  // soft vignette
+  const g = ctx.createRadialGradient(x + w / 2, y + h / 2, h * .35, x + w / 2, y + h / 2, h * .9); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.28)'); ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
 function drawMissions() {
   ctx.fillStyle = '#14231B'; ctx.fillRect(0, 0, W, H);
-  text('Pilih misi', 44, 76, 32, '#FFF4E0', 'left', 800);
-  text('Dokumentasikan satwa endemik Indonesia untuk arsip konservasi desa.', 44, 104, 16, '#B9CBBE', 'left', 400);
-  const cw = 200, ch = 280, gap = 24, x0 = 44, y0 = 140;
+  const glow = ctx.createRadialGradient(W / 2, 260, 40, W / 2, 260, 520); glow.addColorStop(0, 'rgba(60,110,72,.35)'); glow.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  text('Pilih misi', W / 2, 66, 32, '#FFF4E0', 'center', 800);
+  text('Dokumentasikan satwa endemik Indonesia untuk arsip konservasi desa.', W / 2, 94, 16, '#B9CBBE', 'center', 400);
+  const cw = 236, ch = 320, gap = 26, n = MISSIONS.length, x0 = (W - (n * cw + (n - 1) * gap)) / 2, yb = 124;
   MISSIONS.forEach((m, i) => {
-    const x = x0 + i * (cw + gap); const hov = m.open && inRect(mouse.x, mouse.y, { x, y: y0, w: cw, h: ch });
-    rrect(x, y0, cw, ch, 14); ctx.fillStyle = m.open ? (hov ? '#2E4A38' : '#243B2D') : '#1B2B21'; ctx.fill();
+    const x = x0 + i * (cw + gap); const hov = m.open && inRect(mouse.x, mouse.y, { x, y: yb, w: cw, h: ch }); const y0 = yb - (hov ? 4 : 0);
+    if (hov) { ctx.fillStyle = 'rgba(0,0,0,.3)'; rrect(x + 4, y0 + 10, cw, ch, 16); ctx.fill(); }
+    rrect(x, y0, cw, ch, 16); ctx.fillStyle = m.open ? (hov ? '#2E4A38' : '#223828') : '#1B2B21'; ctx.fill();
     ctx.strokeStyle = m.open ? (hov ? '#E07A3F' : '#3D5E48') : '#2A3D31'; ctx.lineWidth = 2; ctx.stroke();
     if (m.open) {
-      ctx.save(); ctx.beginPath(); rrect(x + 10, y0 + 10, cw - 20, 170, 10); ctx.clip(); ctx.fillStyle = '#3F6E45'; ctx.fillRect(x + 10, y0 + 10, cw - 20, 170);
-      ell(x + cw / 2, y0 + 150, 120, 40, '#4E8A55'); if (m.id !== 'badak') seg(x + 10, y0 + 140, x + cw - 10, y0 + 136, '#4E3A2A', 7); else { ell(x + cw / 2, y0 + 172, 70, 8, '#6E5A40'); ell(x + cw / 2 - 10, y0 + 171, 40, 4, 'rgba(150,170,175,.5)'); }
-      ctx.translate(x + cw / 2 - 6, y0 + 140); if (m.id === 'badak') { ctx.translate(-4, 30); ctx.scale(1.25, 1.25); drawBadak(0, 0, 1, 'stand', G.time, true); } else if (m.id === 'cendrawasih') { ctx.translate(24, -4); ctx.scale(2, 2); drawCendrawasih(0, 0, 1, Math.sin(G.time * .6) > -.2 ? 'display' : 'sit', G.time); } else { ctx.scale(1.55, 1.55); drawBekantan(0, 0, 1, 'sit', Math.sin(G.time * .7) > 0, G.time); } ctx.restore();
-      text(m.name, x + 16, y0 + 210, 22, '#FFF4E0', 'left', 800); text(m.latin, x + 16, y0 + 232, 13, '#B9CBBE', 'left', 400);
-      text(MAX_DAYS + ' hari · Misi ' + (i + 1), x + 16, y0 + 262, 13, '#E8A27A', 'left', 600);
-      UI.push({ x, y: y0, w: cw, h: ch, fn: () => newMission(m) }); if (hov) hovering = true;
+      drawMissionArt(m, x + 10, y0 + 10, cw - 20, 200, G.time);
+      if (m.status) { font(11, 700); const tw = ctx.measureText(m.status[0]).width + 16; rrect(x + 18, y0 + 18, tw, 20, 10); ctx.fillStyle = 'rgba(16,26,20,.72)'; ctx.fill(); ellG(x + 26, y0 + 28, 3, 3, 0, m.status[1]); text(m.status[0], x + 32, y0 + 32, 11, '#F2E8D5', 'left', 700); }
+      text(m.name, x + 16, y0 + 242, 22, '#FFF4E0', 'left', 800); text(m.latin, x + 16, y0 + 264, 13, '#B9CBBE', 'left', 400);
+      text(MAX_DAYS + ' hari · Misi ' + (i + 1), x + 16, y0 + 300, 13, '#E8A27A', 'left', 600);
+      if (hov) text('Mulai →', x + cw - 16, y0 + 300, 13, '#FFD2B0', 'right', 700);
+      UI.push({ x, y: yb, w: cw, h: ch, fn: () => newMission(m) }); if (hov) hovering = true;
     } else {
-      rrect(x + 10, y0 + 10, cw - 20, 170, 10); ctx.fillStyle = '#16241C'; ctx.fill();
-      text('?', x + cw / 2, y0 + 112, 54, '#2F4637', 'center', 800);
-      text(m.name, x + 16, y0 + 210, 22, '#5E7566', 'left', 800); text('Segera hadir', x + 16, y0 + 236, 13, '#5E7566', 'left', 500);
+      rrect(x + 10, y0 + 10, cw - 20, 200, 10); ctx.fillStyle = '#16241C'; ctx.fill();
+      text('?', x + cw / 2, y0 + 128, 54, '#2F4637', 'center', 800);
+      text(m.name, x + 16, y0 + 242, 22, '#5E7566', 'left', 800); text('Segera hadir', x + 16, y0 + 266, 13, '#5E7566', 'left', 500);
     }
   });
-  button(44, 462, 140, 44, 'Kembali', () => { G.screen = 'menu'; });
+  button(W / 2 - 70, 470, 140, 44, 'Kembali', () => { G.screen = 'menu'; });
 }
 function drawMap() {
   const hovR = (mouse.y > 100 && mouse.y < 500) ? regionAt(mouse.x, mouse.y) : null;
