@@ -15,8 +15,10 @@ canvas{display:block;touch-action:none;user-select:none;-webkit-user-select:none
 <script>
 'use strict';
 // ===== Core =====
-const W = 960, H = 540, S = 2;
-const cv = document.getElementById('c');
+const W = 960, H = 540;
+// Render resolution follows the pixels actually shown (1x in a 960x540 embed, up to 2x full screen on a sharp display).
+const S = (() => { const need = Math.min(innerWidth / W, innerHeight / H) * (window.devicePixelRatio || 1); return Math.min(2, Math.max(1, Math.ceil(need * 4) / 4)); })();
+const cv = document.getElementById('c'); cv.width = Math.round(W * S); cv.height = Math.round(H * S);
 let ctx = cv.getContext('2d');
 function fit() { const sc = Math.min(innerWidth / W, innerHeight / H); cv.style.width = (W * sc) + 'px'; cv.style.height = (H * sc) + 'px'; }
 addEventListener('resize', fit); fit();
@@ -1117,7 +1119,7 @@ function applyVariant(e) {
   if (im && Math.random() < im.chance) { e.impact = im.label; const d0 = e.draw; e.draw = () => { d0(); im.draw(e); }; }
   else if (ALBINO[e.type] && Math.random() < .04) {
     e.albino = true; const d0 = e.draw;
-    e.draw = () => { ctx.save(); try { ctx.filter = 'grayscale(1) brightness(1.75) sepia(.18) hue-rotate(-25deg)'; } catch (er) {} d0(); ctx.restore(); if (e.alpha > .5 && Math.sin(e.t * 5) > .7) ellG(e.c().x + 10, e.c().y - 14, 2.2, 2.2, 0, 'rgba(255,255,255,.9)'); };
+    e.draw = () => { ctx.save(); try { ctx.filter = 'grayscale(1) contrast(.42) brightness(1.85) sepia(.14) hue-rotate(-20deg)'; } catch (er) {} d0(); ctx.restore(); if (e.alpha > .5 && Math.sin(e.t * 5) > .7) ellG(e.c().x + 10, e.c().y - 14, 2.2, 2.2, 0, 'rgba(255,255,255,.9)'); };
   }
   return e;
 }
@@ -1156,7 +1158,7 @@ function dexArt(k, x, y, w, h, mode, t) {
     else { const gc = { forest: ['#6E8A4A', '#5E4A34'], mud: ['#8A7A5A', '#5E4C38'], sand: ['#D8C29A', '#B89E74'], water: ['#5E9AA0', '#3E7A80'] }[hab]; ctx.fillStyle = lg(0, y + h * .82, 0, y + h, gc); ctx.fillRect(x, y + h * .82, w, h); if (hab === 'forest') for (let i = 0; i < 5; i++) ellG(x + i * w / 4, y + h * .8, 14, 9, 0, '#5E8A64'); }
   }
   ctx.translate(x + w / 2, y + h * .86);
-  try { if (dim) ctx.filter = 'brightness(0) opacity(.55)'; else if (mode === 'albino') ctx.filter = 'grayscale(1) brightness(1.75) sepia(.18) hue-rotate(-25deg)'; } catch (er) {}
+  try { if (dim) ctx.filter = 'brightness(0) opacity(.55)'; else if (mode === 'albino') ctx.filter = 'grayscale(1) contrast(.42) brightness(1.85) sepia(.14) hue-rotate(-20deg)'; } catch (er) {}
   DEXDRAW[k](t);
   ctx.restore();
 }
@@ -2035,11 +2037,13 @@ function gustAt(t) { return Math.pow(Math.max(0, Math.sin(t * 0.21 + 1)), 6); }
 let SWAY_K = 1; // the menu turns this up so the trees move more
 function swayOf(cr, t) { return (Math.sin(t * 0.32 + cr.ph) * cr.amp * .8 + gustAt(t) * Math.sin(t * 1.05 + cr.ph) * cr.amp * 2 + Math.sin(t * 0.9 + cr.ph * 2) * cr.amp * .35 * (SWAY_K - 1)) * SWAY_K; }
 function drawCrowns(crowns, t) {
+  const m = ctx.getTransform(), sx = m.a || 1, ox0 = m.e;
   for (const cr of crowns) {
+    const scrX = (ox0 + cr.ax * sx) / sx; if (t && (scrX + cr.SW < -40 || scrX - cr.SW > W * (S / sx) + 40)) continue;
     const a = swayOf(cr, t);
     ctx.save(); ctx.translate(cr.ax, cr.ay);
     for (const hg of cr.hangers) { const sw = Math.sin(t * 0.5 + hg.ph) * 3 + a * 260; ctx.strokeStyle = hg.col; ctx.lineWidth = hg.w; ctx.beginPath(); ctx.moveTo(hg.x, hg.y); ctx.quadraticCurveTo(hg.x + sw * .5, hg.y + hg.len * .6, hg.x + sw, hg.y + hg.len); ctx.stroke(); if (hg.leaf) for (let k = 0; k < 4; k++) { const q = (k + 1) / 5; ell(hg.x + sw * q * q, hg.y + hg.len * q, 3.2, 1.8, '#5D7E43', k + sw * .05); } }
-    ctx.restore(); ctx.save(); ctx.translate(cr.ax, cr.ay + 12); ctx.rotate(a); ctx.translate(0, -12);
+    ctx.restore(); ctx.save(); ctx.translate(cr.ax + (t ? a * 140 : 0), cr.ay);
     ctx.drawImage(cr.c, -cr.ox, -cr.oy, cr.SW, cr.SH);
     for (let i = 0; i < cr.glints.length; i++) { const gp = cr.glints[i]; const f = Math.sin(t * (0.7 + (i % 3) * .3) + i * 1.7 + cr.ph); if (f < .55) continue; ell(gp[0], gp[1], 3.4, 1.7, 'rgba(235,250,210,' + ((f - .55) * 1.4) + ')', i); }
     ctx.restore();
@@ -2348,19 +2352,24 @@ const HORIZON = { river: 352, mangrove: 348, pedada: 352, estuary: 300 };
 function drawScene(L, t, ev) {
   const Ly = getLayers(worldL() || L); const mx = clamp(mouse.x / W - .5, -.5, .5);
   const dv = drive();
-  ctx.drawImage(Ly.far, -(Ly.farW - (W + 2 * PAD)) - PAD + mx * 10 + dv * 0.2, 0, Ly.farW, H);
+  blitX(Ly.far, -(Ly.farW - (W + 2 * PAD)) - PAD + mx * 10 + dv * 0.2, Ly.farW);
   if (L.kind === 'river' && ev > 0) { ctx.globalAlpha = ev * .55; const g = ctx.createLinearGradient(0, 0, 0, HORIZON.river); g.addColorStop(0, '#E2702C'); g.addColorStop(1, '#F9B860'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, HORIZON.river); ctx.globalAlpha = 1; }
   if (L.kind === 'pedada' && ev > 0) { ctx.globalAlpha = ev * .35; ctx.fillStyle = '#FFF2C4'; ctx.fillRect(0, 0, W, HORIZON.pedada); ctx.globalAlpha = 1; }
   const mx0 = W - Ly.mainW + dv;
-  ctx.drawImage(Ly.main, mx0, 0, Ly.mainW, H);
+  blitX(Ly.main, mx0, Ly.mainW);
   ctx.strokeStyle = 'rgba(255,255,255,.2)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
   for (const band of SHIMMER[L.kind]) { const [y0, y1] = band; const n = Math.round((y1 - y0) / 9); for (let i = 0; i < n; i++) { const yy = y0 + 6 + i * ((y1 - y0 - 8) / n); const sp = 10 + (i % 3) * 6; const off = (t * sp + dv + i * 137) % (W + 160) - 80; const len = 14 + (i % 4) * 8; ctx.beginPath(); ctx.moveTo(off - len, yy); ctx.lineTo(off + len, yy); ctx.stroke(); } }
-  ctx.save(); ctx.translate(mx0, 0); drawCrowns(Ly.FO.bgCrowns, t); ctx.drawImage(Ly.FO.mainBase, 0, 0, Ly.mainW, H); drawCrowns(Ly.FO.mainCrowns, t); ctx.restore();
+  ctx.save(); ctx.translate(mx0, 0); drawCrowns(Ly.FO.bgCrowns, t); ctx.restore(); blitX(Ly.FO.mainBase, mx0, Ly.mainW); ctx.save(); ctx.translate(mx0, 0); drawCrowns(Ly.FO.mainCrowns, t); ctx.restore();
+}
+// Draw a full-height layer of width w at x=dx, copying only the part that is on screen.
+function blitX(img, dx, w) {
+  const x0 = Math.max(dx, -4), x1 = Math.min(dx + w, W + 4); if (x1 <= x0) return;
+  const k = img.width / w; ctx.drawImage(img, (x0 - dx) * k, 0, (x1 - x0) * k, img.height, x0, 0, x1 - x0, H);
 }
 function drawForeground(L, t, ev) {
   const Ly = getLayers(worldL() || L); const mx = clamp(mouse.x / W - .5, -.5, .5);
   const sk = Math.sin(t * .35) * .01 + gustAt(t) * Math.sin(t * 1.0) * .022;
-  ctx.save(); ctx.translate(0, H); ctx.transform(1, 0, sk, 1, 0, 0); ctx.translate(0, -H); ctx.drawImage(Ly.fg, -(Ly.fgW - (W + 2 * PAD)) - PAD - mx * 26 + drive() * 1.35, 0, Ly.fgW, H); ctx.restore();
+  blitX(Ly.fg, -(Ly.fgW - (W + 2 * PAD)) - PAD - mx * 26 + drive() * 1.35 + sk * 260, Ly.fgW);
 }
 // The sun sits in the far layer: it shifts with the parallax and the drive, and the trees can hide it.
 let SUN_SHADE = null; // the menu darkens its left side behind the title, which hides a sun there
@@ -3363,6 +3372,12 @@ function drawCredits() {
   ['bekantan', 'badak', 'cendrawasih', 'rangkong', 'penyu', 'kakatua', 'kuntul', 'tupai'].forEach((k, i) => { const x = 70 + i * 116, bob = Math.abs(Math.sin(t * 2 + i)) * 2; ctx.save(); ctx.translate(x, 520 - bob); ctx.scale(.62, .62); try { DEXDRAW[k](t); } catch (er) {} ctx.restore(); });
   ctx.globalAlpha = 1;
   button(W / 2 - 70, 400, 140, 40, 'Kembali', () => { G.screen = 'menu'; }, { size: 15 });
+  { const armed = G.resetArm && G.time - G.resetArm < 3;
+    button(W - 220, 400, 160, 40, armed ? 'Yakin? Klik lagi' : 'Reset progres', () => {
+      if (!armed) { G.resetArm = G.time; return; }
+      try { for (const k of ['jepretRimba.dex.v1', 'jepretRimba.intro', 'jepretRimba.tut']) localStorage.removeItem(k); } catch (er) {}
+      DEX = {}; for (const k in DEXIMG) delete DEXIMG[k]; G.resetArm = 0; G.screen = 'menu';
+    }, { size: 13, primary: armed }); }
 }
 function drawHowto() {
   ctx.fillStyle = 'rgba(5,12,9,.7)'; ctx.fillRect(0, 0, W, H); UI = [];
