@@ -165,13 +165,33 @@ const THREATDEF = {
   lahan: { name: 'Bakau dibuka', pts: 15, pos: L => ({ x: 770, y: L.groundY + 34 }) }
 };
 const LAYOUTS = {
-  river: { kind: 'river', canopy: [{ x: 250, y: 215, sc: 1 }, { x: 640, y: 205, sc: 1 }], groundY: 372, waterY: 432, base: 402 },
-  mangrove: { kind: 'mangrove', canopy: [{ x: 240, y: 228, sc: 1 }, { x: 650, y: 216, sc: 1 }], groundY: 384, waterY: 448, base: 394 },
-  pedada: { kind: 'pedada', canopy: [{ x: 250, y: 232, sc: .9 }, { x: 640, y: 200, sc: 1.1 }], groundY: 380, waterY: 452, base: 410 },
-  estuary: { kind: 'estuary', canopy: [{ x: 230, y: 262, sc: .85 }, { x: 620, y: 256, sc: .85 }], groundY: 434, waterY: 344, base: 400 }
+  river: { kind: 'river', canopy: [{ x: 250, y: 215, sc: 1, sp: 'beringin', v: 1 }, { x: 640, y: 205, sc: 1, sp: 'meranti', v: 2 }], groundY: 372, waterY: 432, base: 402 },
+  mangrove: { kind: 'mangrove', canopy: [{ x: 240, y: 228, sc: 1, sp: 'bakau', v: 3 }, { x: 650, y: 216, sc: 1, sp: 'apiapi', v: 4 }], groundY: 384, waterY: 448, base: 394 },
+  pedada: { kind: 'pedada', canopy: [{ x: 250, y: 232, sc: .9, sp: 'ketapang', v: 5 }, { x: 640, y: 200, sc: 1.1, sp: 'pedada', v: 6 }], groundY: 380, waterY: 452, base: 410 },
+  estuary: { kind: 'estuary', canopy: [{ x: 230, y: 262, sc: .85, sp: 'bakau', v: 7 }, { x: 620, y: 256, sc: .85, sp: 'apiapi', v: 8 }], groundY: 434, waterY: 344, base: 400 }
 };
 // Walkable branch line: each main tree has two curved limbs rising from the trunk; thin branches reach the screen edges.
-function limbY(c, d) { return c.y + 10 - 18 * d + 6 * Math.sin(Math.PI * d); }
+// Main limb profile per species (animals walk on this line). a: sag (+) or arch (-), w: S-wave, e/eb: elbow position/height,
+// th: thickness, tw: side twigs per limb. Every profile meets the same end height, so the branch line stays connected.
+const LIMB = {
+  def: { a: 6, w: 0, e: 0, eb: 0, th: 1, tw: 2 },
+  meranti: { a: -4, w: 0, e: .3, eb: 12, th: 1.15, tw: 1 },     // steep rise near the trunk, then level
+  beringin: { a: -9, w: 2, e: 0, eb: 0, th: 1.35, tw: 3 },      // wide heavy arch
+  ketapang: { a: 9, w: 0, e: 0, eb: 0, th: .95, tw: 2 },        // flat tier that sags, tip turns up
+  rengas: { a: 4, w: 4, e: 0, eb: 0, th: 1, tw: 2 },
+  waru: { a: 11, w: -3, e: 0, eb: 0, th: .9, tw: 3 },           // soft droop
+  pedada: { a: 2, w: 0, e: .55, eb: 9, th: 1, tw: 3 },          // elbow far out
+  bakau: { a: 3, w: 5, e: 0, eb: 0, th: 1, tw: 2 },             // gnarled S-curve
+  tancang: { a: -2, w: -6, e: 0, eb: 0, th: .95, tw: 2 },
+  apiapi: { a: -6, w: 3, e: .22, eb: 10, th: .8, tw: 4 }        // thin, rises early, wiggles
+};
+function limbP(c) { return LIMB[c.sp] || LIMB.def; }
+function limbVar(c) { const v = c.v || 0; const r = Math.sin(v * 12.9898 + 4.1) * 43758.5453; return r - Math.floor(r); }
+function limbY(c, d) {
+  const p = limbP(c), m = .75 + .5 * limbVar(c), fl = (c.v || 0) % 2 ? -1 : 1;
+  const el = p.e ? -p.eb * (d < p.e ? d / p.e : (1 - d) / (1 - p.e)) : 0;
+  return c.y + 10 - 18 * d + (p.a * Math.sin(Math.PI * d) + fl * p.w * Math.sin(2 * Math.PI * d) + el) * m;
+}
 function branchY(L, x) {
   // The walkable branch line: each tree's two limbs, thin branches out to the layer edges.
   const C = L.canopy, n = C.length, LWd = L.width || W, A = C[0], Z = C[n - 1], sa = 130 * A.sc, sz = 130 * Z.sc;
@@ -332,12 +352,12 @@ function wideLayout(L, D) {
   const width = W + D + 160, off = width - W;
   const R = mulberry(5000 + L.kind.length * 31 + (L.island ? ISLANDLOOK[L.island].seed : 0));
   const base = treeSpecFor(L), pool = AREATREES[L.kind] || base.bg.map(b => b[3]), branching = pool.filter(t => PALMS.indexOf(t) < 0);
-  const C = [{ x: L.canopy[0].x + off, y: L.canopy[0].y, sc: L.canopy[0].sc }, { x: L.canopy[1].x + off, y: L.canopy[1].y, sc: L.canopy[1].sc }];
+  const C = [{ x: L.canopy[0].x + off, y: L.canopy[0].y, sc: L.canopy[0].sc, sp: base.main[0][0], v: L.canopy[0].v }, { x: L.canopy[1].x + off, y: L.canopy[1].y, sc: L.canopy[1].sc, sp: base.main[1][0], v: L.canopy[1].v }];
   const M = [base.main[0], base.main[1]];
   for (let x = C[0].x, k = 0; ; k++) {
     x -= 360 + Math.round(R() * 140); if (x < 140) break;
     const like = k % 2 === 0 ? 1 : 0; // alternate the two trees' heights so the branch line stays smooth
-    C.unshift({ x, y: L.canopy[like].y, sc: L.canopy[like].sc }); M.unshift([branching[Math.floor(R() * branching.length)], base.main[like][1]]);
+    const spk = branching[Math.floor(R() * branching.length)]; C.unshift({ x, y: L.canopy[like].y, sc: L.canopy[like].sc, sp: spk, v: 20 + k }); M.unshift([spk, base.main[like][1]]);
   }
   const tall = base.bg.find(b => b[3] !== 'nipah') || base.bg[0], low = base.bg.find(b => b[3] === 'nipah') || [0, tall[1] + 6, tall[1] + 6];
   const bg = base.bg.map(b => [b[0] + off, b[1], b[2], b[3], b[4]]); // the spot's own background trees at the start
@@ -356,7 +376,7 @@ function branchYW(L, wx) {
   return y;
 }
 function perchesIn(L, a, b) { const V = worldL() || L, o = worldL() ? SS.X0 : 0; return V.perches.map(q => ({ x: q.x + o, y: q.y })).filter(q => q.x >= a && q.x <= b).sort((u, v) => u.x - v.x); }
-function treesIn(L, a, b) { const V = worldL() || L, o = worldL() ? SS.X0 : 0; return V.canopy.map(c => ({ x: c.x + o, y: c.y, sc: c.sc })).filter(c => c.x >= a && c.x <= b).sort((u, v) => u.x - v.x); }
+function treesIn(L, a, b) { const V = worldL() || L, o = worldL() ? SS.X0 : 0; return V.canopy.map(c => Object.assign({}, c, { x: c.x + o })).filter(c => c.x >= a && c.x <= b).sort((u, v) => u.x - v.x); }
 // place a clue/threat (positions are defined for a one-screen layout) next to the pair of
 // trees nearest to world x `target`
 function placeIn(posFn, target, L) {
@@ -364,7 +384,7 @@ function placeIn(posFn, target, L) {
   const o = SS.X0, C = V.canopy; let i = 0, bd = 1e9;
   for (let k = 0; k + 1 < C.length; k++) { const d = Math.abs((C[k].x + C[k + 1].x) / 2 + o - target); if (d < bd) { bd = d; i = k; } }
   const ws = (C[i].x + C[i + 1].x) / 2 + o - 445; // 445 = middle of the two trees on a normal screen
-  const pseudo = Object.assign({}, L, { canopy: [C[i], C[i + 1]].map(c => ({ x: c.x + o - ws, y: c.y, sc: c.sc })) });
+  const pseudo = Object.assign({}, L, { canopy: [C[i], C[i + 1]].map(c => Object.assign({}, c, { x: c.x + o - ws })) });
   const q = posFn(pseudo); return { x: q.x + ws, y: q.y };
 }
 function offScreen(e, m) { const sx = toScreenX(e.x); return sx < -m || sx > W + m; }
@@ -947,15 +967,49 @@ function bigTree(x, base, by, kind, sc, R) {
   if (kind !== 'mangrove') for (let i = 0; i < 3; i++) liana(x - 90 * sc + i * 70 * sc + (R() - .5) * 20, by - 20, 50 + R() * 40, R);
 }
 function drawLimbs(L, ci, R) {
-  const c = L.canopy[ci], sc = c.sc, span = 130 * sc;
+  const c = L.canopy[ci], sc = c.sc, span = 130 * sc, P = limbP(c), BK = (SPP[c.sp] && SPP[c.sp].bark) || ['#7C6148', '#5E4733', '#4A3726'], bark = BK[2];
+  // Trunk and both limbs are filled as ONE shape with the trunk's own gradient, so there is no seam at the fork.
+  const sh = (SPP[c.sp] && SPP[c.sp].shape) || c.sp, tw0 = (sh === 'meranti' ? 8 : sh === 'apiapi' ? 7 : 9) * sc;
+  const tTop = c.y - 30 * sc - (sh === 'meranti' ? 58 * sc : 0), tBase = L.base;
+  const halfW = y => { const t = clamp((y - tBase) / (tTop - tBase), 0, 1); return ((1 - t) * (1 - t) * 1.75 + 2 * (1 - t) * t * .9 + t * t * .6) * tw0; };
+  const G = lg(c.x - tw0 * 1.6, 0, c.x + tw0 * 1.6, 0, BK);
+  // trunk keeps rising above the fork into the crown, with two support limbs (hidden by leaves higher up)
+  const lean = (R() - .5) * 14 * sc; growBranch(c.x, c.y + 30 * sc, -Math.PI / 2 + lean / 120, 120 * sc, Math.max(14 * sc * P.th, tw0 * 1.4), 0, R, G, [], 0);
+  for (const sd of [-1, 1]) { const tw = []; growBranch(c.x + lean * .3, c.y - 14 * sc, -Math.PI / 2 + sd * (.55 + R() * .25), (60 + R() * 20) * sc, 5.5 * sc * P.th, 1, R, G, tw, .01); }
+  const N = 24, K0 = 7, S = {};
   for (const side of [-1, 1]) {
+    const knots = [[.3 + R() * .15, (2 + R() * 2) * sc], [.6 + R() * .25, (1.5 + R() * 2) * sc]];
     const top = [], bot = [];
-    for (let k = 0; k <= 16; k++) { const d = k / 16, x = c.x + side * span * d, y = limbY(c, d), th = (13 - 8 * d) * sc; top.push([x, y]); bot.push([x + side * 2, y + th]); }
-    ctx.fillStyle = lg(0, c.y - 10, 0, c.y + 24, ['#7C6148', '#4E3A2A', '#33251A']);
-    ctx.beginPath(); ctx.moveTo(c.x - 7 * sc, c.y + 26 * sc); top.forEach(p => ctx.lineTo(p[0], p[1])); for (let k = bot.length - 1; k >= 0; k--) ctx.lineTo(bot[k][0], bot[k][1]); ctx.lineTo(c.x + 7 * sc, c.y + 30 * sc); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,225,180,.28)'; ctx.lineWidth = 1.2; ctx.beginPath(); top.forEach((p, k) => k ? ctx.lineTo(p[0], p[1] + .5) : ctx.moveTo(p[0], p[1] + .5)); ctx.stroke();
-    for (const d of [.38, .72]) { const x = c.x + side * span * d, y = limbY(c, d); const ex = x + side * (22 + R() * 14) * sc, ey = y - (26 + R() * 18) * sc; curve(x, y + 2, (x + ex) / 2, y - 6 * sc, ex, ey, 3.2 * sc, '#4E3A2A'); leafBlob(ex, ey - 4, 13 * sc, ['#2C5A35', '#437A49', '#8CBB72'], R); }
-    for (const d of [.55, .92]) { const x = c.x + side * span * d, y = limbY(c, d) + 4; curve(x, y, x + side * 6, y + 8, x + side * 4, y + 16, 1.6, '#5A4330'); ell(x + side * 4, y + 18, 4, 2.4, '#4F8A4A', side * .6); }
+    for (let k = 0; k <= N; k++) {
+      const d = k / N, x = c.x + side * span * d, y = limbY(c, d);
+      let th = (15 - 10 * d) * sc * P.th + Math.sin(d * 9 + side) * .9 * sc; for (const kn of knots) th += kn[1] * Math.exp(-Math.pow((d - kn[0]) / .05, 2));
+      top.push([x, y]); bot.push([x, y + th]);
+    }
+    S[side] = { top, bot };
+  }
+  const yJ = c.y + 64 * sc, hJ = halfW(yJ);
+  ctx.fillStyle = G; ctx.beginPath(); ctx.moveTo(c.x - hJ, yJ + 3);
+  { const T = S[-1], b = T.bot[K0]; ctx.bezierCurveTo(c.x - hJ * 1.02, yJ - (yJ - b[1]) * .65, b[0] + span * .1, b[1] + 3 * sc, b[0], b[1]);
+    for (let k = K0 + 1; k <= N; k++) ctx.lineTo(T.bot[k][0], T.bot[k][1]); for (let k = N; k >= 0; k--) ctx.lineTo(T.top[k][0], T.top[k][1]); }
+  { const T = S[1]; for (let k = 0; k <= N; k++) ctx.lineTo(T.top[k][0], T.top[k][1]); for (let k = N; k >= K0; k--) ctx.lineTo(T.bot[k][0], T.bot[k][1]);
+    const b = T.bot[K0]; ctx.bezierCurveTo(b[0] - span * .1, b[1] + 3 * sc, c.x + hJ * 1.02, yJ - (yJ - b[1]) * .65, c.x + hJ, yJ + 3); }
+  ctx.closePath(); ctx.fill();
+  // bark grain flowing from the trunk up into the limbs
+  ctx.lineWidth = 1.1; ctx.strokeStyle = 'rgba(25,16,10,.25)';
+  for (let i = -2; i <= 2; i++) { const sd = i < 0 ? -1 : i > 0 ? 1 : (R() < .5 ? -1 : 1), T = S[sd], k = 6 + Math.abs(i) * 2, e = T.top[k], f = .45 + Math.abs(i) * .12;
+    curve(c.x + i * hJ * .32, yJ + 12, c.x + i * hJ * .3, c.y + 26 * sc, e[0], lerp(e[1], T.bot[k][1], f), 1.1, 'rgba(25,16,10,.25)'); }
+  for (const side of [-1, 1]) {
+    const { top, bot } = S[side];
+    // underside shadow, top light, bark streaks
+    ctx.strokeStyle = 'rgba(25,16,10,.3)'; ctx.lineWidth = 2 * sc; ctx.beginPath(); bot.forEach((p, k) => k > K0 + 2 ? ctx.lineTo(p[0], p[1] - 1) : k === K0 + 2 ? ctx.moveTo(p[0], p[1] - 1) : 0); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,225,180,.28)'; ctx.lineWidth = 1.3; ctx.beginPath(); top.forEach((p, k) => k > 5 ? ctx.lineTo(p[0], p[1] + .7) : k === 5 ? ctx.moveTo(p[0], p[1] + .7) : 0); ctx.stroke();
+    ctx.strokeStyle = 'rgba(30,20,12,.28)'; ctx.lineWidth = .9;
+    for (let b = 0; b < 6; b++) { const d0 = .32 + R() * .55, d1 = d0 + .06 + R() * .08, k0 = Math.round(d0 * N), k1 = Math.min(N, Math.round(d1 * N)), f = .35 + R() * .4;
+      ctx.beginPath(); for (let k = k0; k <= k1; k++) { const yy = lerp(top[k][1], bot[k][1], f); k === k0 ? ctx.moveTo(top[k][0], yy) : ctx.lineTo(top[k][0], yy); } ctx.stroke(); }
+    // broken stub
+    { const d = .45 + R() * .2, k = Math.round(d * N), x = top[k][0], y = top[k][1]; taperLimb(x, y + 2, x - side * 4 * sc, y - 9 * sc, 0, 4 * sc, 3 * sc, BK[1]); ell(x - side * 4 * sc, y - 9 * sc, 1.6 * sc, 1.2 * sc, '#A88C6C'); }
+    for (let q = 0; q < P.tw; q++) { const d = .22 + (q + .3 + R() * .4) / P.tw * .7; const x = c.x + side * span * d, y = limbY(c, d); const tw = []; growBranch(x, y + 2, side > 0 ? -.8 - R() * .3 : Math.PI + .8 + R() * .3, (30 + R() * 16) * sc, 4 * sc, 1, R, bark, tw, .03); for (const tp of tw) leafBlob(tp[0], tp[1] - 3, (9 + R() * 4) * sc, ['#2C5A35', '#437A49', '#8CBB72'], R); }
+    for (const d of [.58, .93]) { const x = c.x + side * span * d, y = limbY(c, d) + 6 * sc; curve(x, y, x + side * 6, y + 8, x + side * 4, y + 16, 1.6, '#5A4330'); ell(x + side * 4, y + 18, 4, 2.4, '#4F8A4A', side * .6); }
   }
 }
 function entryBranches(L, R) {
@@ -1016,7 +1070,7 @@ function trunkC(x, base, top, w, bark, lean) {
   ctx.strokeStyle = 'rgba(25,16,10,.25)'; ctx.lineWidth = 1.1; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(x + i * w * .28 + lean, top + 8); ctx.quadraticCurveTo(x + i * w * .3 + 3 + lean * .5, (top + base) / 2, x + i * w * .45, base - 4); ctx.stroke(); }
   ctx.strokeStyle = 'rgba(255,235,200,.2)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - w * .5 + lean, top + 6); ctx.quadraticCurveTo(x - w * .8 + lean * .5, base - 40, x - w * 1.3, base - 2); ctx.stroke();
 }
-function limbs(n, w, h, col, R) { ctx.strokeStyle = col; ctx.lineCap = 'round'; for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + (R() - .5) * 2.2; const L = h * (.45 + R() * .4); ctx.lineWidth = 3 + R() * 3; ctx.beginPath(); ctx.moveTo(0, -18); ctx.quadraticCurveTo(Math.cos(a) * L * .4, -18 + Math.sin(a) * L * .6, Math.cos(a) * L * (w / h) * .7, -18 + Math.sin(a) * L); ctx.stroke(); } }
+function limbs(n, w, h, col, R) { const tips = []; for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + ((i + .5) / n - .5) * 2.4 + (R() - .5) * .3; growBranch(0, -14, a, h * (.4 + R() * .25) * (1 + Math.abs(Math.cos(a)) * (w / h - 1) * .5), 6 + R() * 2, 1, R, col, tips, .02); } return tips; }
 
 // dense small-leaf mass lit from the upper left (beringin, api-api, pedada)
 function fine(cx, cy, rx, ry, pal, R, n, sz) {
@@ -1028,11 +1082,38 @@ function fine(cx, cy, rx, ry, pal, R, n, sz) {
 function rosette(x, y, sz, cols, R) { const a0 = R() * PI2; for (let k = 0; k < 6; k++) { const a = a0 + k / 6 * PI2 + (R() - .5) * .4; ctx.save(); ctx.translate(x, y); ctx.rotate(a); ell(sz * .55, 0, sz * .55, sz * .23, cols[k % cols.length]); ctx.restore(); } }
 function taperLimb(x0, y0, x1, y1, bend, w0, w1, col) { const mx = (x0 + x1) / 2 + bend, my = (y0 + y1) / 2 - Math.abs(bend) * .4; for (let k = 0; k < 6; k++) { const t0 = k / 6, t1 = (k + 1) / 6; const q = t => [(1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * mx + t * t * x1, (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * my + t * t * y1]; const a = q(t0), b = q(t1); seg(a[0], a[1], b[0], b[1], col, lerp(w0, w1, (t0 + t1) / 2)); } return [mx, my]; }
 
+// Organic branch: curved, tapering, curls upward toward the tip and forks. Pushes end points into tips.
+function growBranch(x, y, ang, len, w, depth, R, col, tips, curl) {
+  const n = 7, pts = [[x, y]]; let a = ang, px = x, py = y;
+  for (let k = 1; k <= n; k++) { a += (R() - .5) * .22 - Math.sign(Math.cos(a)) * curl; px += Math.cos(a) * len / n; py += Math.sin(a) * len / n; pts.push([px, py]); }
+  const w1 = w * .55, L = [], Rr = [];
+  for (let k = 0; k <= n; k++) { const p = pts[k], q = pts[Math.min(n, k + 1)], o = pts[Math.max(0, k - 1)]; let dx = q[0] - o[0], dy = q[1] - o[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d; const hw = lerp(w, w1, k / n) / 2; L.push([p[0] - dy * hw, p[1] + dx * hw]); Rr.push([p[0] + dy * hw, p[1] - dx * hw]); }
+  ctx.fillStyle = col; ctx.beginPath(); L.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); for (let k = n; k >= 0; k--) ctx.lineTo(Rr[k][0], Rr[k][1]); ctx.closePath(); ctx.fill();
+  if (w > 2.4) { ctx.strokeStyle = 'rgba(255,232,196,.22)'; ctx.lineWidth = Math.max(.8, w * .18); ctx.lineCap = 'round'; ctx.beginPath(); (Math.cos(ang) > 0 ? Rr : L).forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); }
+  const end = pts[n];
+  if (depth <= 0) { tips.push([end[0], end[1], a]); return; }
+  const mid = pts[3 + Math.floor(R() * 2)], up = Math.cos(a) > 0 ? -1 : 1;
+  growBranch(mid[0], mid[1], a + up * (.45 + R() * .3), len * (.5 + R() * .15), w1 * 1.1, depth - 1, R, col, tips, curl * 1.2);
+  growBranch(end[0], end[1], a + up * (.05 + R() * .15), len * (.55 + R() * .12), w1, depth - 1, R, col, tips, curl * 1.2);
+  if (depth > 1 && R() < .6) { const lo = pts[5]; growBranch(lo[0], lo[1], a - up * (.15 + R() * .15), len * .3, w1 * .8, 0, R, col, tips, curl * 2); }
+}
+
+// A few primary limbs that fork twice: a natural spreading crown instead of spokes from one point.
+function spreadCrown(w, h, n, wd, col, R, y0) { const tips = []; for (let i = 0; i < n; i++) { const t = (i + .5) / n, a = -Math.PI + .18 + t * (Math.PI - .36) + (R() - .5) * .2; const len = (Math.abs(Math.cos(a)) * w * .24 + Math.abs(Math.sin(a)) * h * .3) * (.85 + R() * .3); growBranch((t - .5) * 8, (y0 || -6) - R() * 10, a, len, wd, 2, R, col, tips, .012); } return tips; }
+function branchTo(x0, y0, x1, y1, w, depth, R, col, tips) { const a = Math.atan2(y1 - y0, x1 - x0) + (R() - .5) * .2; growBranch(x0, y0, a, Math.hypot(x1 - x0, y1 - y0) * (depth ? .7 : .95), w, depth, R, col, tips || [], .025); }
+// Hanging aerial root: wavy, tapering, splays into small rootlets where it meets the mud.
+function dropRoot(x0, y0, x1, y1, w, col, R) {
+  const n = 10, ph = R() * 6, amp = 2 + R() * 3, L = [], Rr = [];
+  for (let k = 0; k <= n; k++) { const t = k / n, x = lerp(x0, x1, t * t * .6 + t * .4) + Math.sin(t * 7 + ph) * amp * t, y = lerp(y0, y1, t), hw = lerp(w * .45, w * .8, t) / 2; L.push([x - hw, y]); Rr.push([x + hw, y]); }
+  ctx.fillStyle = col; ctx.beginPath(); L.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); for (let k = n; k >= 0; k--) ctx.lineTo(Rr[k][0], Rr[k][1]); ctx.closePath(); ctx.fill();
+  const bx = L[n][0] + w * .2; for (const sd of [-1, 1]) curve(bx, y1 - 10, bx + sd * 6, y1 - 8, bx + sd * (9 + R() * 5), y1 + 4, Math.max(1, w * .45), col);
+}
+
 // crown painters: draw around (0,0) = branch point; return glint points
 function crownCauli(w, h, pal, R, lift) {
   const g = []; const base = -lift - 6;
   const tips = [[-w * .36, base - h * .45], [-w * .14, base - h * .78], [w * .12, base - h * .82], [w * .36, base - h * .5], [0, base - h * .52]];
-  for (const tp of tips) taperLimb(0, base + 4, tp[0], tp[1] + 10, (R() - .5) * 30, 9, 3, '#5E4B3A');
+  taperLimb(0, base + 14, 0, base - 10, 0, 10, 8, '#5E4B3A'); for (const tp of tips) branchTo((R() - .5) * 6, base - 6, tp[0], tp[1] + 14, 8, 1, R, '#5E4B3A');
   for (const tp of tips) {
     const cw = w * (.15 + R() * .05), ch = h * (.2 + R() * .06);
     for (let i = 0; i < 6; i++) { const cx = tp[0] + (R() - .5) * cw * 1.5, cy = tp[1] - R() * ch * .9; const r = ch * (.55 + R() * .35); leafBlob(cx, cy, r, pal, R); if (i % 2) g.push([cx - r * .2, cy - r * .3]); }
@@ -1049,25 +1130,32 @@ function crownBeringin(w, h, pal, R) {
   return g;
 }
 function crownKetapang(w, h, pal, R) {
-  const g = []; const tiers = 4; const red = ['#A9542F', '#B8693A', '#8E4A2A'];
+  // Terminalia catappa: one leader with uneven tiers of near-horizontal limbs that fork and curl up at the tips;
+  // leaves cluster in rosettes at the twig ends.
+  const g = [], tips = [], red = ['#A9542F', '#B8693A', '#8E4A2A'], bark = '#5E4B3A'; const tiers = 4;
+  const top = -h * 1.02, lean = (R() - .5) * 16;
+  taperLimb(0, 14, lean, top, (R() - .5) * 18, 8, 2, bark);
   for (let k = 0; k < tiers; k++) {
-    const y = -12 - k * h * .26, hw = w * .5 * (1 - k * .21) * (0.9 + R() * .2);
-    seg(0, y + 10, 0, y - h * .26, '#5E4B3A', 5 - k);
-    for (const sd of [-1, 1]) for (let b = 0; b < 2; b++) {
-      const len = hw * (b ? .7 : 1) * (0.85 + R() * .2), ang = b ? .35 : .08, ex = sd * len, ey = y - len * ang * (b ? 1 : .6) - 4;
-      taperLimb(0, y + 6, ex, ey, sd * 6, 4 - k * .6, 1.6, '#5E4B3A');
-      for (const t of [.5, .72, .9, 1.04]) {
-        const rx = ex * t, ry = y + 4 + (ey - y - 4) * t - 2; const sz = (11 + R() * 5) * (1 - k * .1);
-        const isRed = R() < .06; const cols = isRed ? red : (R() < .5 ? [pal[1], pal[2], pal[1]] : [pal[1], pal[1], pal[0]]);
-        rosette(rx + 2, ry + 3, sz, [pal[0]], R); rosette(rx, ry, sz, cols, R); g.push([rx, ry - 3]);
-      }
+    const t = k / tiers, cy = lerp(-6, top * .8, t), cx = lean * t * t, hw = w * .5 * (1 - k * .19) * (.85 + R() * .25);
+    for (const sd of [-1, 1]) {
+      const y = cy + (sd < 0 ? -1 : 1) * (4 + R() * 10), ang = sd > 0 ? -.08 - R() * .2 : Math.PI + .08 + R() * .2;
+      growBranch(cx, y, ang, hw * (k < 2 ? .5 : .62) * (.9 + R() * .2), Math.max(3.2, 8 - k * 1.5), k < 2 ? 2 : 1, R, bark, tips, .03 + k * .012);
+    }
+  }
+  growBranch(lean, top + 4, -Math.PI / 2 + (R() - .5) * .5, h * .18, 2.4, 1, R, bark, tips, 0);
+  tips.sort((a, b) => a[1] - b[1]).reverse();
+  for (const tp of tips) {
+    const sz = 11 + R() * 5, n = 4 + Math.floor(R() * 2);
+    for (let i = 0; i < n; i++) {
+      const rx = tp[0] + (R() - .5) * 30, ry = tp[1] - 2 - R() * 10;
+      const isRed = R() < .06; const cols = isRed ? red : (R() < .5 ? [pal[1], pal[2], pal[1]] : [pal[1], pal[1], pal[0]]);
+      rosette(rx + 2, ry + 3, sz, [pal[0]], R); rosette(rx, ry, sz, cols, R); if (i === 0) g.push([rx, ry - 3]);
     }
   }
   return g;
 }
 function crownPedada(w, h, pal, R) {
-  const g = []; const tips = [];
-  for (let i = 0; i < 7; i++) { const t = i / 6; const tx = -w * .46 + t * w * .92 + (R() - .5) * 20, ty = -h * (.3 + Math.sin(Math.PI * t) * .45) - R() * 12; taperLimb(0, -10, tx, ty, (R() - .5) * 40, 6, 2, '#5E4E3E'); tips.push([tx, ty]); }
+  const g = []; const tips = spreadCrown(w, h, 5, 6, '#5E4E3E', R, -8).filter(tp => tp[1] < -h * .15);
   for (const tp of tips) { fine(tp[0], tp[1], w * (.09 + R() * .04), h * (.15 + R() * .05), pal, R, 60, 5); g.push([tp[0] - 6, tp[1] - 8]); }
   for (let i = 0; i < 34; i++) {
     const tp = tips[Math.floor(R() * tips.length)]; const x = tp[0] + (R() - .5) * w * .18, y = tp[1] + 4, len = 22 + R() * 40;
@@ -1084,12 +1172,11 @@ function crownBakau(w, h, pal, R) {
   for (let i = 0; i < 70; i++) { const a = R() * PI2, d = Math.pow(R(), .6); const x = Math.cos(a) * d * w * .46, y = -h * .5 + Math.sin(a) * d * h * .44; if (y > -h * .06) continue; pts.push([x, y]); }
   pts.sort((a, b) => a[1] - b[1]).reverse();
   for (const pt of pts) { const lit = -pt[0] / w * .9 - (pt[1] + h * .5) / h * 1.6; const cols = lit > .45 ? [pal[2], pal[1]] : lit > -.2 ? [pal[1], shade(pal[1], -.1)] : [pal[0], shade(pal[0], .08)]; rosette(pt[0], pt[1], 13 + R() * 4, cols, R); if (lit > .4) g.push([pt[0], pt[1] - 2]); }
-  for (let i = 0; i < 16; i++) { const x = (R() - .5) * w * .8, y = -h * .1 + R() * 8, len = 14 + R() * 12; seg(x, y, x + 1, y + len, '#6E7E3A', 1.8); seg(x + 1, y + len - 3, x + 1, y + len, '#6A4A2E', 2.2); }
+  for (let i = 0; i < 9; i++) { const x = (R() - .5) * w * .8, y = -h * .1 + R() * 8, len = 12 + R() * 10, bx = (R() - .5) * 5; ell(x, y, 2.2, 1.6, '#5E6E32'); taperLimb(x, y, x + bx, y + len, bx * .6, 1.2, 2.2, '#6E7E3A'); ell(x + bx, y + len, 1.2, 1.6, '#6A4A2E'); }
   return g;
 }
 function crownApiapi(w, h, pal, R) {
-  const g = []; const tips = [];
-  for (let i = 0; i < 8; i++) { const t = i / 7; const tx = -w * .56 + t * w * 1.12 + (R() - .5) * 26, ty = -h * (.22 + Math.sin(Math.PI * t) * .42) - R() * 16; const m = taperLimb(0, -8, tx, ty, (R() - .5) * 60, 6, 1.8, '#9C9688'); taperLimb(m[0], m[1], m[0] + (R() - .5) * 40, m[1] - 18 - R() * 14, 8, 2.5, 1.2, '#9C9688'); tips.push([tx, ty], [m[0] + (R() - .5) * 30, m[1] - 20]); }
+  const g = []; const tips = spreadCrown(w * 1.1, h, 5, 6, '#9C9688', R, -4);
   for (const tp of tips) { const rx = w * (.07 + R() * .05), ry = h * (.12 + R() * .06); fine(tp[0], tp[1], rx, ry, pal, R, 70, 4.6); g.push([tp[0] - rx * .3, tp[1] - ry * .4]); }
   return g;
 }
@@ -1111,16 +1198,16 @@ function buildTree(T, R) {
   else if (sp === 'nipah') { }
   else {
     if (sp === 'bakau') propRoots(x, base, sc, R);
-    if (sp === 'beringin') { for (let k = 0; k < 7; k++) { const px = x + (k - 3) * 22 * sc + (R() - .5) * 10; if (Math.abs(px - x) < 26 * sc) continue; ctx.strokeStyle = shade(bark[1], (R() - .5) * .2); ctx.lineWidth = (2.4 + R() * 2.4) * sc; ctx.beginPath(); ctx.moveTo(px, by - 6); ctx.quadraticCurveTo(px + (R() - .5) * 8, (by + base) / 2, px + (R() - .5) * 6, base + 2); ctx.stroke(); }
+    if (sp === 'beringin') { for (let k = 0; k < 7; k++) { const px = x + (k - 3) * 22 * sc + (R() - .5) * 10; if (Math.abs(px - x) < 26 * sc) continue; dropRoot(px, by - 6, px + (R() - .5) * 10, base + 2, (3 + R() * 3) * sc, shade(bark[1], (R() - .5) * .2), R); }
       trunkC(x - 12 * sc, base, by - 30 * sc, 6 * sc, bark, 6); trunkC(x + 14 * sc, base, by - 30 * sc, 5 * sc, bark, -4); }
-    if (sp === 'apiapi') { const mid = (base + by) / 2; taperLimb(x - 4 * sc, base - 4, x - 70 * sc, mid - 10 * sc, -18 * sc, 7 * sc, 2.6 * sc, bark[1]); taperLimb(x + 4 * sc, base - 10, x + 74 * sc, mid + 6 * sc, 20 * sc, 6 * sc, 2.4 * sc, bark[1]); taperLimb(x - 70 * sc, mid - 10 * sc, x - 92 * sc, mid - 34 * sc, -6, 2.6 * sc, 1.2, bark[1]); taperLimb(x + 74 * sc, mid + 6 * sc, x + 96 * sc, mid - 18 * sc, 6, 2.4 * sc, 1.2, bark[1]); for (const q of [[x - 92 * sc, mid - 40 * sc], [x + 96 * sc, mid - 24 * sc]]) fine(q[0], q[1], 22 * sc, 14 * sc, jitterPal(SPP.apiapi.pal, R), R, 40, 4.4); }
+    if (sp === 'apiapi') { const mid = (base + by) / 2, pa = jitterPal(SPP.apiapi.pal, R); for (const sd of [-1, 1]) { const tp = []; growBranch(x + sd * 5 * sc, base - 8 - R() * 10, sd > 0 ? -.55 - R() * .15 : Math.PI + .55 + R() * .15, (base - mid) * .75 + 20 * sc, 6.5 * sc, 1, R, bark[1], tp, .02); for (const q of tp) fine(q[0], q[1] - 6, 20 * sc, 13 * sc, pa, R, 40, 4.4); } }
     if (sp === 'meranti') lift = 58 * sc;
     trunkC(x, base, by - 30 * sc - lift, (sp === 'meranti' ? 8 : sp === 'apiapi' ? 7 : 9) * sc, bark);
     if (sp === 'meranti') buttress(x, base, 11 * sc); else if (sp === 'ketapang') buttress(x, base, 6 * sc);
     if (sp === 'apiapi') pneumato(x - 70 * sc, x + 70 * sc, base - 2, R, '#6E6656');
   }
   if (main) { ell(x, base + 3, 70 * sc, 7 * sc, 'rgba(20,14,8,.28)'); drawLimbs(T.L, T.ci, R); }
-  if (sp === 'bakau') { const pts = main ? [-.9, -.62, -.4, .45, .7, .92].map(d => [x + d * 130 * sc, limbY(T.L.canopy[T.ci], Math.abs(d)) + 8]) : [-70, -40, 45, 75].map(dx => [x + dx * sc, by - 10]); for (const pt of pts) { const ex = pt[0] + (R() - .5) * 30; curve(pt[0], pt[1], (pt[0] + ex) / 2 + (R() - .5) * 16, (pt[1] + base) / 2, ex, base + 6, 2.2 * sc, '#4A3428'); curve(ex - 6, base - 10, ex, base - 20, ex + 6, base + 6, 1.6, '#4A3428'); } }
+  if (sp === 'bakau') { const pts = main ? [-.9, -.62, -.4, .45, .7, .92].map(d => [x + d * 130 * sc, limbY(T.L.canopy[T.ci], Math.abs(d)) + 8]) : [-70, -40, 45, 75].map(dx => [x + dx * sc, by - 10]); for (const pt of pts) { if (R() < .3) continue; dropRoot(pt[0], pt[1], pt[0] + Math.sign(pt[0] - x) * (12 + R() * 22), base + 6, 3.4 * sc, '#4A3428', R); } }
   // crown sprite
   const SW = (sp === 'beringin' ? 500 : 440) * sc + 60, SH = (sp === 'meranti' ? 360 : 300) * sc + 80, ox = SW / 2, oy = SH - 50;
   let glints = [];
@@ -1201,7 +1288,7 @@ function layoutFor(spot) {
   if (LAYOUT_VARIANTS[key]) return LAYOUT_VARIANTS[key];
   const t = look.trees[base.kind];
   const L = Object.assign({}, base, { key, island: G.region });
-  L.canopy = base.canopy.map((c, i) => ({ x: clamp(c.x + look.dx[i], 170, 760), y: c.y, sc: t.main[i][1] }));
+  L.canopy = base.canopy.map((c, i) => ({ x: clamp(c.x + look.dx[i], 170, 760), y: c.y, sc: t.main[i][1], sp: t.main[i][0], v: look.seed + i }));
   const A = L.canopy[0], B = L.canopy[1];
   L.perches = [A.x - 85 * A.sc, A.x + 85 * A.sc, B.x - 85 * B.sc, B.x + 85 * B.sc].map(x => ({ x, y: branchY(L, x) }));
   return (LAYOUT_VARIANTS[key] = L);
@@ -1248,6 +1335,35 @@ function extraFg(kind, R) {
     if (kind === 'river') { if (R() < .5) fern(q, H + 10 + R() * 14, 130 + R() * 40, a, '#2E4C2C', R); else reeds(q, H + 4, R); }
     else if (kind === 'pedada') fern(q, H + 10 + R() * 14, 130 + R() * 40, a, '#2F5A30', R);
     else frond(q, H + 10 + R() * 20, 180 + R() * 50, a, '#4C7A3C', '#2F5A2C', R);
+  }
+}
+// Environment detail painted onto the main layer along its whole width: shrubs on the bank,
+// flowers, pebbles, leaf litter, lily pads, crab holes, shells.
+const BANK = { river: 350, pedada: 356, mangrove: 378, estuary: 366 };
+function shrub(x, y, s, pal, R) {
+  const n = 3 + Math.floor(R() * 3);
+  for (let i = 0; i < n; i++) { const dx = (i - (n - 1) / 2) * 9 * s + (R() - .5) * 6 * s, r = (8 + R() * 7) * s; ell(x + dx, y - r * .55, r, r * .75, i % 2 ? pal[0] : pal[1]); }
+  for (let i = 0; i < 2; i++) ell(x + (R() - .5) * 14 * s, y - (12 + R() * 6) * s, (5 + R() * 3) * s, (4 + R() * 2) * s, pal[2]);
+}
+function envDetail(L, R, w) {
+  const k = L.kind, by = BANK[k];
+  const pals = { river: ['#4E6E3A', '#62874A', '#9CBF6A'], pedada: ['#4C7E44', '#66A055', '#A8D47E'], mangrove: ['#4E6E52', '#62866A', '#9DBA98'], estuary: ['#6E8A4A', '#86A35A', '#C2CF86'] };
+  const pal = pals[k];
+  // bank shrubs (sparser on the beach)
+  for (let x = 10; x < w; x += (k === 'estuary' ? 120 : 46) + R() * 60) { if (R() < .25) continue; shrub(x, by + R() * 4, .7 + R() * .6, pal, R); }
+  if (k === 'river' || k === 'pedada') {
+    for (let i = 0; i < w / 14; i++) { const x = R() * w, y = by + 2 + R() * 10; const col = ['#F4F1E6', '#F2D24A', '#E98AA6', '#C9A6E8'][Math.floor(R() * 4)]; seg(x, y + 5, x, y, '#5E8A40', 1); ell(x, y, 1.8, 1.8, col); }
+    for (let i = 0; i < w / 22; i++) ell(R() * w, by + 16 + R() * 30, 1.6 + R() * 2.6, 1 + R() * 1.4, R() < .5 ? '#8E8576' : '#6E665A');
+    for (let i = 0; i < w / 18; i++) ell(R() * w, by + 12 + R() * 34, 2.6, 1.2, ['#B5883E', '#C9A24A', '#8E5A2E'][Math.floor(R() * 3)], R() * 3);
+    const wy = k === 'river' ? 414 : 424;
+    for (let x = 30; x < w; x += 70 + R() * 140) { if (R() < .4) continue; for (let j = 0; j < 2 + R() * 3; j++) { const px = x + (R() - .5) * 40, py = wy + R() * 26, r = 6 + R() * 5; ctx.fillStyle = '#4E8A4A'; ctx.beginPath(); ctx.ellipse(px, py, r, r * .38, 0, .35, PI2 - .05); ctx.lineTo(px, py); ctx.closePath(); ctx.fill(); ell(px - r * .3, py - 1, r * .4, r * .12, 'rgba(200,240,170,.35)'); if (R() < .25) { ell(px + r * .3, py - 2, 2.6, 2, '#F6E8F0'); ell(px + r * .3, py - 2.4, 1.2, 1, '#F2C84A'); } } }
+  } else if (k === 'mangrove') {
+    for (let i = 0; i < w / 10; i++) ell(R() * w, 384 + R() * 18, 1.4 + R(), .8, 'rgba(40,28,18,.55)');
+    for (let i = 0; i < w / 30; i++) ell(R() * w, 382 + R() * 20, 2.6, 1.2, ['#8E7A4A', '#6E8A4A'][Math.floor(R() * 2)], R() * 3);
+  } else {
+    for (let i = 0; i < w / 16; i++) { const x = R() * w, y = 380 + R() * 140; ell(x, y, 2 + R() * 1.6, 1.4 + R(), ['#F2E6D2', '#E8CDB0', '#D9B6A0'][Math.floor(R() * 3)], R() * 3); }
+    for (let x = 60; x < w; x += 260 + R() * 260) { const y = 400 + R() * 90, l = 30 + R() * 30, a = (R() - .5) * .5; ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.fillStyle = '#8A7A66'; ctx.fillRect(-l / 2, -2.5, l, 5); ctx.fillStyle = 'rgba(255,240,220,.3)'; ctx.fillRect(-l / 2, -2.5, l, 1.5); ctx.restore(); }
+    for (let i = 0; i < w / 40; i++) { const x = R() * w, y = 372 + R() * 20; tuft(x, y, 7 + R() * 6, '#8FA25A', R); }
   }
 }
 // Mud pools along the estuary panorama.
@@ -1324,6 +1440,7 @@ function getLayers(L) {
     const f0 = far; far = mkLayer(farW, H, () => { ctx.drawImage(f0, 0, 0, farW, H); LW = farW - 2 * PAD; ctx.translate(PAD, 0); extraSky(L.kind, fo, R); });
     const g0 = fg; fg = mkLayer(fgW, H, () => { ctx.drawImage(g0, 0, 0, fgW, H); LW = fgW - 2 * PAD; ctx.translate(PAD, 0); extraFg(L.kind, R); });
   }
+  { const m0 = main; main = mkLayer(mainW, H, () => { ctx.drawImage(m0, 0, 0, mainW, H); LW = mainW; envDetail(L, mulberry(777 + mainW), mainW); }); }
   LW = W;
   { const hy = HORIZON[L.kind]; const hz = mkLayer(farW, H, () => { ctx.drawImage(far, 0, 0, farW, H); const g = ctx.createLinearGradient(0, hy - 90, 0, hy + 10); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, hazeFor(L) + 'AA'); ctx.fillStyle = g; ctx.fillRect(0, hy - 90, farW, 100); }); far = blurred(hz, 1); }
   tint(fg, '#0C1C10', .32); fg = blurred(fg, 2.2);
@@ -1362,6 +1479,11 @@ function drawOverlay(L, t, ev) {
     for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(600 + i * 70, 0); ctx.lineTo(650 + i * 70, 0); ctx.lineTo(330 + i * 95, H); ctx.lineTo(250 + i * 95, H); ctx.closePath(); ctx.fill(); }
   }
   if (L.kind === 'estuary' && ev > 0) { for (let i = 0; i < 22; i++) { const x = (i * 47 + t * 30) % W; const tw = .5 + .5 * Math.sin(t * 6 + i); ell(x, 306 + (i % 6) * 9, 3 * tw, 1.1, 'rgba(255,255,255,' + (0.85 * ev) + ')'); } }
+  { const su = SUN[L.kind]; ctx.save(); ctx.globalCompositeOperation = 'screen';
+    for (let i = 0; i < 6; i++) { const a0 = .5 + i * .32 + Math.sin(t * .07 + i) * .03, a = .045 + (i % 3) * .015, al = (.05 + .035 * Math.sin(t * .4 + i * 1.9)) * (L.kind === 'mangrove' ? 1.6 : 1);
+      if (al <= 0) continue; const g = ctx.createLinearGradient(su[0], su[1], su[0] + Math.cos(a0) * 700, su[1] + Math.sin(a0) * 700); g.addColorStop(0, su[2] + al + ')'); g.addColorStop(1, su[2] + '0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(su[0], su[1]); ctx.lineTo(su[0] + Math.cos(a0 - a) * 900, su[1] + Math.sin(a0 - a) * 900); ctx.lineTo(su[0] + Math.cos(a0 + a) * 900, su[1] + Math.sin(a0 + a) * 900); ctx.closePath(); ctx.fill(); }
+    ctx.restore(); }
   { const su = SUN[L.kind]; const pul = .85 + .15 * Math.sin(t * .5); ctx.save(); ctx.globalCompositeOperation = 'screen';
     const g = ctx.createRadialGradient(su[0], su[1], 10, su[0], su[1], 420); g.addColorStop(0, su[2] + (.16 * pul) + ')'); g.addColorStop(1, su[2] + '0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore(); }
   ctx.drawImage(getLayers(L).vig, 0, 0, W, H);
@@ -1765,7 +1887,7 @@ const SPOTICON = {
 function drawSpotPreview(sp, x, y, w, h) {
   const Ly = getLayers(layoutFor(sp));
   ctx.save(); rrect(x, y, w, h, 10); ctx.clip();
-  ctx.drawImage(Ly.far, PAD * S, 0, W * S, H * S, x, y, w, h); ctx.drawImage(Ly.main, 0, 0, W * S, H * S, x, y, w, h);
+  ctx.drawImage(Ly.far, PAD * S, 0, W * S, H * S, x, y, w, h); ctx.drawImage(Ly.main, 0, 0, W * S, H * S, x, y, w, h); ctx.drawImage(Ly.FO.full, 0, 0, W * S, H * S, x, y, w, h);
   ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(x, y + h - 26, w, 26);
   ctx.restore();
   ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; rrect(x, y, w, h, 10); ctx.stroke();
