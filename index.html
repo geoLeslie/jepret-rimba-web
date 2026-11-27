@@ -995,7 +995,7 @@ const DEXIMG = {};
 function dexSave() { try { localStorage.setItem(DEX_KEY, JSON.stringify(DEX)); } catch (er) {} }
 function dexRecord(type, photo, pc, variant) {
   const d = DEX[type] || (DEX[type] = { n: 0, q: 0, v: {} }); d.n++;
-  if (variant) d.v[variant] = true;
+  if (variant) d.v[variant] = true; if (variant === 'albino') d.an = (d.an || 0) + 1;
   if (photo.q > d.q || !d.img) { d.q = Math.max(d.q, photo.q); try { const c = document.createElement('canvas'); c.width = 160; c.height = 108; c.getContext('2d').drawImage(pc, 0, 0, 160, 108); d.img = c.toDataURL('image/jpeg', .72); delete DEXIMG[type]; } catch (er) {} }
   const isNew = d.n === 1; dexSave(); return isNew;
 }
@@ -1009,29 +1009,62 @@ const DEXDRAW = {
   daralaut: t => drawDaralaut(0, -18, 1, false, t), kera: t => drawKera(0, 0, 1, false, t, false), tupai: t => { ctx.scale(1.4, 1.4); drawTupai(0, 0, 1, 'sit', t); },
   biawak: t => { ctx.scale(.7, .7); drawBiawak(0, 0, 1, false, 0, true, t); }, kepiting: t => { ctx.scale(1.2, 1.2); drawKepiting(0, 0, false, t, false); }, tembakul: t => { ctx.scale(1.3, 1.3); drawTembakul(0, 0, 1, false, false, t); }
 };
+const DEXHAB = { bekantan: 'tree', cendrawasih: 'tree', rangkong: 'tree', julang: 'tree', kakatua: 'tree', pekakak: 'tree', kera: 'tree', tupai: 'tree',
+  badak: 'forest', biawak: 'mud', kepiting: 'mud', tembakul: 'mud', penyu: 'sand', kuntul: 'water', elang: 'sky', daralaut: 'sky' };
+function dexArt(k, x, y, w, h, mode, t) {
+  // mode: 'seen' (colour), 'albino' (pale), 'hidden' (silhouette)
+  ctx.save(); rrect(x, y, w, h, 7); ctx.clip();
+  const hab = DEXHAB[k], dim = mode === 'hidden';
+  const sky = { tree: ['#9ED2D8', '#DCEFD8'], forest: ['#B8DCCE', '#E6EFDA'], mud: ['#C9DED6', '#EEF2E7'], sand: ['#7EC2E4', '#E6F4F8'], water: ['#A8D2DC', '#E2F0EA'], sky: ['#6FB4D8', '#CDE9F2'] }[hab];
+  ctx.fillStyle = dim ? '#16241C' : lg(0, y, 0, y + h, sky); ctx.fillRect(x, y, w, h);
+  if (!dim) {
+    if (hab === 'tree') { leafBlob(x + 6, y + 6, 22, ['#2E6A3A', '#3E8048', '#7EB86A'], mulberry(k.length)); leafBlob(x + w - 4, y + 10, 18, ['#2E6A3A', '#3E8048', '#7EB86A'], mulberry(k.length + 3)); ctx.fillStyle = '#5E4733'; ctx.beginPath(); ctx.moveTo(x, y + h * .84); ctx.quadraticCurveTo(x + w / 2, y + h * .8, x + w, y + h * .86); ctx.lineTo(x + w, y + h * .86 + 6); ctx.quadraticCurveTo(x + w / 2, y + h * .82 + 6, x, y + h * .84 + 6); ctx.fill(); }
+    else if (hab === 'sky') { ellG(x + w * .3, y + h * .7, 22, 6, 0, 'rgba(255,255,255,.7)'); ellG(x + w * .72, y + h * .3, 16, 4, 0, 'rgba(255,255,255,.6)'); }
+    else { const gc = { forest: ['#6E8A4A', '#5E4A34'], mud: ['#8A7A5A', '#5E4C38'], sand: ['#D8C29A', '#B89E74'], water: ['#5E9AA0', '#3E7A80'] }[hab]; ctx.fillStyle = lg(0, y + h * .82, 0, y + h, gc); ctx.fillRect(x, y + h * .82, w, h); if (hab === 'forest') for (let i = 0; i < 5; i++) ellG(x + i * w / 4, y + h * .8, 14, 9, 0, '#5E8A64'); }
+  }
+  ctx.translate(x + w / 2, y + h * .86);
+  try { if (dim) ctx.filter = 'brightness(0) opacity(.55)'; else if (mode === 'albino') ctx.filter = 'grayscale(1) brightness(1.75) sepia(.18) hue-rotate(-25deg)'; } catch (er) {}
+  DEXDRAW[k](t);
+  ctx.restore();
+}
+function dexBadge(x, y, lab, col) { font(9, 700); const tw = ctx.measureText(lab).width + 10; rrect(x, y, tw, 13, 6.5); ctx.fillStyle = col; ctx.fill(); text(lab, x + 5, y + 9.5, 9, '#1E2B22', 'left', 700); return tw + 4; }
 function drawDex() {
   ctx.fillStyle = '#14231B'; ctx.fillRect(0, 0, W, H);
-  const found = DEXORDER.filter(k => DEX[k]).length;
-  text('Ensiklopedia Satwa', 40, 56, 28, '#FFF4E0', 'left', 800);
-  text('Terdokumentasi ' + found + ' dari ' + DEXORDER.length + ' spesies · tersimpan di browser ini', 40, 82, 14, '#B9CBBE', 'left', 400);
-  rrect(40, 92, 300, 6, 3); ctx.fillStyle = '#20362A'; ctx.fill(); if (found) { rrect(40, 92, 300 * found / DEXORDER.length, 6, 3); ctx.fillStyle = '#E07A3F'; ctx.fill(); }
-  button(W - 180, 34, 140, 42, 'Kembali', () => { G.screen = 'menu'; });
-  const cols = 8, cw = 106, chh = 186, gx = 8, x0 = (W - (cols * cw + (cols - 1) * gx)) / 2, y0 = 114;
-  DEXORDER.forEach((k, i) => {
-    const x = x0 + (i % cols) * (cw + gx), y = y0 + Math.floor(i / cols) * (chh + 10), d = DEX[k], sp = SPECIES[k];
-    rrect(x, y, cw, chh, 10); ctx.fillStyle = d ? '#223828' : '#1A2A20'; ctx.fill(); ctx.strokeStyle = d ? '#3D5E48' : '#24382B'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.save(); rrect(x + 6, y + 6, cw - 12, 92, 7); ctx.clip(); ctx.fillStyle = d ? '#2E5238' : '#16241C'; ctx.fillRect(x + 6, y + 6, cw - 12, 92);
-    const im = d && dexImg(k);
-    if (im) ctx.drawImage(im, x + 6 - 12, y + 6, (cw - 12) + 24, 92);
-    else { ctx.translate(x + cw / 2, y + 86); if (!d) { try { ctx.filter = 'brightness(0) opacity(.55)'; } catch (er) {} } DEXDRAW[k](G.time); }
-    ctx.restore();
-    text(d ? sp.name : '???', x + 8, y + 116, 12, d ? '#FFF4E0' : '#5E7566', 'left', 700);
-    if (d) {
-      wrapText(sp.latin, x + 8, y + 132, cw - 14, 13, 10, '#9FB5A6', 400);
-      text('Difoto ' + d.n + 'x · ' + d.q + '%', x + 8, y + 164, 10.5, '#E8A27A', 'left', 600);
-      let bx = x + 8; for (const [vk, lab, col] of [['albino', 'Albino', '#F2E8D5'], ['terdampak', 'Terdampak', '#FFB4A0']]) if (d.v[vk]) { font(9, 700); const tw = ctx.measureText(lab).width + 10; rrect(bx, y + 170, tw, 12, 6); ctx.fillStyle = col; ctx.fill(); text(lab, bx + 5, y + 179, 9, '#1E2B22', 'left', 700); bx += tw + 4; }
-    } else text('Belum ditemukan', x + 8, y + 132, 10, '#4E6456', 'left', 500);
+  const tab = G.dexTab || 'spesies', albList = Object.keys(ALBINO);
+  const found = DEXORDER.filter(k => DEX[k]).length, albFound = albList.filter(k => DEX[k] && DEX[k].v.albino).length;
+  text('Ensiklopedia Satwa', 40, 52, 28, '#FFF4E0', 'left', 800);
+  button(W - 180, 26, 140, 42, 'Kembali', () => { G.screen = 'menu'; });
+  // tabs
+  [['spesies', 'Spesies ' + found + '/' + DEXORDER.length], ['albino', 'Albino ' + albFound + '/' + albList.length]].forEach(([id, lab], i) => {
+    const x = 40 + i * 176, on = tab === id, hov = inRect(mouse.x, mouse.y, { x, y: 68, w: 168, h: 32 });
+    rrect(x, 68, 168, 32, 16); ctx.fillStyle = on ? '#E07A3F' : hov ? '#2E4A38' : '#20362A'; ctx.fill(); text(lab, x + 84, 89, 14, on ? '#fff' : '#CFE0D3', 'center', 700);
+    UI.push({ x, y: 68, w: 168, h: 32, fn: () => { G.dexTab = id; } }); if (hov) hovering = true;
   });
+  text(tab === 'spesies' ? 'Tersimpan di browser ini. Potret satwa untuk mengisi halamannya.' : 'Satwa albino sangat langka (sekitar 4%). Temukan semuanya!', 400, 89, 13, '#9FB5A6', 'left', 500);
+  if (tab === 'spesies') {
+    const cols = 8, cw = 106, chh = 192, gx = 8, x0 = (W - (cols * cw + (cols - 1) * gx)) / 2, y0 = 114;
+    DEXORDER.forEach((k, i) => {
+      const x = x0 + (i % cols) * (cw + gx), y = y0 + Math.floor(i / cols) * (chh + 10), d = DEX[k], sp = SPECIES[k];
+      rrect(x, y, cw, chh, 10); ctx.fillStyle = d ? '#223828' : '#1A2A20'; ctx.fill(); ctx.strokeStyle = d ? '#3D5E48' : '#24382B'; ctx.lineWidth = 1.5; ctx.stroke();
+      dexArt(k, x + 6, y + 6, cw - 12, 92, d ? 'seen' : 'hidden', G.time);
+      if (d) { let bx = x + 9; if (d.v.albino) bx += dexBadge(bx, y + 10, 'Albino', '#F2E8D5'); if (d.v.terdampak) dexBadge(bx, y + 10, 'Terdampak', '#FFB4A0'); }
+      if (d) { let yy = wrapText(sp.name, x + 8, y + 114, cw - 14, 14, 11.5, '#FFF4E0', 700); wrapText(sp.latin, x + 8, yy + 15, cw - 14, 12, 9.5, '#9FB5A6', 400); text('Difoto ' + d.n + 'x · ' + d.q + '%', x + 8, y + chh - 10, 10.5, '#E8A27A', 'left', 600); }
+      else { text('???', x + 8, y + 114, 12, '#5E7566', 'left', 700); text('Belum ditemukan', x + 8, y + 130, 10, '#4E6456', 'left', 500); }
+    });
+  } else {
+    const n = albList.length, cw = 112, chh = 250, gx = 12, x0 = (W - (n * cw + (n - 1) * gx)) / 2, y0 = 130;
+    albList.forEach((k, i) => {
+      const x = x0 + i * (cw + gx), y = y0, d = DEX[k], got = d && d.v.albino, sp = SPECIES[k];
+      rrect(x, y, cw, chh, 12); ctx.fillStyle = got ? '#2A2E3A' : '#1A2A20'; ctx.fill(); ctx.strokeStyle = got ? '#C8B8E8' : '#24382B'; ctx.lineWidth = got ? 2 : 1.5; ctx.stroke();
+      dexArt(k, x + 6, y + 6, cw - 12, 120, got ? 'albino' : 'hidden', G.time);
+      if (got && Math.sin(G.time * 3 + i) > .5) { ellG(x + cw - 22, y + 24, 2.4, 2.4, 0, '#fff'); ellG(x + 22, y + 60, 1.6, 1.6, 0, '#fff'); }
+      let yy = wrapText(got ? sp.name + ' albino' : '???', x + 9, y + 146, cw - 16, 15, 12, got ? '#F6F0FF' : '#5E7566', 700);
+      if (got) { wrapText(sp.latin, x + 9, yy + 16, cw - 16, 12, 9.5, '#B8B0D0', 400); text('Ditemukan ' + (d.an || 1) + 'x', x + 9, y + chh - 14, 11, '#D8C8F8', 'left', 600); }
+      else { wrapText(d ? 'Sudah kenal ' + sp.name + ', tapi belum versi albinonya.' : 'Belum ditemukan', x + 9, yy + 17, cw - 16, 13, 10, '#4E6456', 500); }
+    });
+    rrect(x0, y0 + chh + 20, n * cw + (n - 1) * gx, 54, 12); ctx.fillStyle = '#1C3024'; ctx.fill();
+    wrapText('Albino terjadi karena tubuh satwa tidak menghasilkan pigmen. Di alam, satwa albino lebih mudah terlihat pemangsa, jadi sangat jarang bertahan. Fotonya bernilai dua kali lipat.', x0 + 16, y0 + chh + 42, n * cw + (n - 1) * gx - 32, 17, 12.5, '#CFE0D3', 400);
+  }
 }
 // ===== Pameran foto desa (automatic) and the three endings =====
 function expoPick() {
@@ -1052,7 +1085,33 @@ const ENDINGS = {
   kosong: { title: 'Pameran Sepi', col: '#D9D2C2', text: 'Dinding pameran masih kosong. Warga pulang tanpa cerita baru tentang hutan mereka.', hint: 'Jepret satwa dan ancaman di sesi berikutnya.' }
 };
 const EXPO_SAY = { target: ['Ini satwa langka itu?', 'Wah, akhirnya ada fotonya!'], animal: ['Cantik sekali!', 'Aku baru tahu ada ini.', 'Itu di dekat desa kita?'], threat: ['Ini sungai kita?', 'Siapa yang buang ini?', 'Harus kita bersihkan.'], impact: ['Kasihan...', 'Gara-gara sampah kita.', 'Ayo kita tolong.'] };
-function goExpo() { G.expo = expoPick(); G.expoT = 0; G.screen = 'expo'; if (G.expo.end === 'sejati') sfxGood(); else sfxSoft(); }
+function goExpo() { G.expo = expoPick(); G.expoT = 0; G.expoStage = 0; G.expoEndT = 0; G.screen = 'expo'; if (G.expo.end === 'sejati') sfxGood(); else sfxSoft(); }
+const VSHIRT = ['#C8573A', '#3A6E9A', '#E0A030', '#4E8A55', '#8A4A7A', '#D8783A', '#2E5E5A', '#B84A4A', '#5A6E9A', '#9A7A3A'];
+function drawVillager(i, t, lookX) {
+  const kid = i === 2 || i === 7, vx = 52 + i * 95 + (hsh(i) - .5) * 24, base = H + 4, sc = kid ? .72 : 1 + (hsh(i + 9) - .5) * .12, bob = Math.sin(t * 1.8 + i) * 1.2;
+  const head = ['hair', 'peci', 'hijab', 'caping', 'hair', 'hijab', 'peci', 'hair', 'hijab', 'caping'][i], skin = ['#8A5A3A', '#A8704A', '#6E4A30', '#B07A52'][i % 4], shirt = VSHIRT[i];
+  const pointing = (i === 1 || i === 6) && Math.sin(t * .7 + i) > 0, lean = clamp((lookX - vx) / 600, -.12, .12);
+  ctx.save(); ctx.translate(vx, base); ctx.scale(sc, sc);
+  const sy = -96 + bob;
+  // body (back view) with shoulders
+  ctx.fillStyle = shirt; ctx.beginPath(); ctx.moveTo(-30, 4); ctx.lineTo(-30, sy + 30); ctx.quadraticCurveTo(-30, sy + 10, -14, sy + 6); ctx.lineTo(14, sy + 6); ctx.quadraticCurveTo(30, sy + 10, 30, sy + 30); ctx.lineTo(30, 4); ctx.closePath(); ctx.fill();
+  if (i % 3 === 0) { ctx.fillStyle = 'rgba(255,240,200,.22)'; for (let r = 0; r < 5; r++) for (let c = 0; c < 4; c++) { ctx.beginPath(); ctx.arc(-22 + c * 15 + (r % 2) * 7, sy + 20 + r * 16, 3, 0, PI2); ctx.fill(); } }
+  else if (i % 3 === 1) { ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(-30, sy + 40, 60, 6); ctx.fillRect(-30, sy + 58, 60, 3); }
+  ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(-2, sy + 8, 4, 100);
+  // arms
+  if (pointing) { const ax = lean > 0 ? 1 : -1; capsule(ax * 24, sy + 18, ax * 40, sy - 26, 6, 4.5, shirt); ellG(ax * 42, sy - 31, 4.5, 4.5, 0, skin); }
+  else { capsule(-27, sy + 16, -31, sy + 58, 6, 5, shirt); capsule(27, sy + 16, 31, sy + 58, 6, 5, shirt); }
+  // neck & head from behind, tilted toward the photos
+  ctx.save(); ctx.translate(0, sy + 4); ctx.rotate(lean);
+  ctx.fillStyle = skin; ctx.fillRect(-6, -10, 12, 12);
+  ellG(-13, -22, 3, 5, 0, skin); ellG(13, -22, 3, 5, 0, skin);
+  if (head === 'hijab') { ctx.fillStyle = ['#E8D2A0', '#3A6E9A', '#D8A0B0', '#7A9A6A'][i % 4]; ctx.beginPath(); ctx.ellipse(0, -24, 15, 17, 0, 0, PI2); ctx.fill(); ctx.beginPath(); ctx.moveTo(-15, -22); ctx.quadraticCurveTo(-24, 4, -26, 14); ctx.lineTo(26, 14); ctx.quadraticCurveTo(24, 4, 15, -22); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.12)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-8, -12); ctx.quadraticCurveTo(-12, 2, -16, 12); ctx.stroke(); }
+  else { ellG(0, -24, 13, 15, 0, '#1E1610'); ellG(-4, -30, 6, 4, -.4, 'rgba(255,255,255,.08)');
+    if (head === 'peci') { ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.moveTo(-12, -30); ctx.lineTo(-11, -42); ctx.quadraticCurveTo(0, -45, 11, -42); ctx.lineTo(12, -30); ctx.quadraticCurveTo(0, -27, -12, -30); ctx.fill(); }
+    if (head === 'caping') { ctx.fillStyle = '#D8B878'; ctx.beginPath(); ctx.moveTo(-30, -30); ctx.lineTo(0, -52); ctx.lineTo(30, -30); ctx.quadraticCurveTo(0, -24, -30, -30); ctx.fill(); ctx.strokeStyle = 'rgba(120,90,40,.4)'; ctx.lineWidth = 1; for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(0, -52); ctx.lineTo(k * 13, -28); ctx.stroke(); } } }
+  ctx.restore();
+  ctx.restore();
+}
 function drawExpo() {
   const X = G.expo; G.expoT += 1 / 60; const t = G.expoT;
   ctx.fillStyle = lg(0, 0, 0, H, ['#E9DFC8', '#D8C9A8']); ctx.fillRect(0, 0, W, H);
@@ -1060,38 +1119,46 @@ function drawExpo() {
   ctx.fillStyle = '#8A6A44'; ctx.fillRect(0, 330, W, 8); ctx.fillStyle = lg(0, 338, 0, H, ['#7A5C3A', '#5E4428']); ctx.fillRect(0, 338, W, H);
   text('Pameran Foto Desa', W / 2, 46, 26, '#3A2A1A', 'center', 800);
   text(G.mission.name + ' · ' + regionName() + ' · Hari ' + G.maxDays, W / 2, 68, 13, '#7A5E40', 'center', 500);
-  const n = X.photos.length, pw = 118, gap = 26, x0 = (W - (n * (pw + 12) + (n - 1) * gap)) / 2;
-  seg(30, 96, W - 30, 96, '#6E5236', 1.4);
+  const n = X.photos.length, gap = 22, pw = n ? Math.min(150, (W - 100 - (n - 1) * gap) / n - 12) : 0, tot = n * (pw + 12) + (n - 1) * gap, x0 = (W - tot) / 2;
+  // a sagging rope with pegs
+  const ropeY = xx => 92 + Math.sin(Math.PI * clamp((xx - 30) / (W - 60), 0, 1)) * 16;
+  ctx.strokeStyle = '#6E5236'; ctx.lineWidth = 1.6; ctx.beginPath(); for (let xx = 30; xx <= W - 30; xx += 10) xx === 30 ? ctx.moveTo(xx, ropeY(xx)) : ctx.lineTo(xx, ropeY(xx)); ctx.stroke();
   X.photos.forEach((p, i) => {
     const appear = clamp((t - i * .35) * 3, 0, 1); if (appear <= 0) return;
-    const x = x0 + i * (pw + 12 + gap), rot = (hsh(i + 3) - .5) * .08 + Math.sin(t * 1.2 + i) * .006;
-    seg(x + (pw + 12) / 2, 96, x + (pw + 12) / 2, 112, '#6E5236', 1); ellG(x + (pw + 12) / 2, 98, 3, 3, 0, '#C84A2A');
-    ctx.save(); ctx.globalAlpha = appear; ctx.translate(0, (1 - appear) * -20); polaroid(p, x, 112, pw, rot);
-    if (p.impact || p.kind === 'threat') { rrect(x + 4, 104, 60, 16, 8); ctx.fillStyle = '#C8402E'; ctx.fill(); text(p.impact ? 'Terdampak' : 'Ancaman', x + 10, 116, 10, '#fff', 'left', 700); }
-    else if (p.kind === 'target') { rrect(x + 4, 104, 54, 16, 8); ctx.fillStyle = '#E0A030'; ctx.fill(); text('Langka', x + 10, 116, 10, '#fff', 'left', 700); }
+    const x = x0 + i * (pw + 12 + gap), cx = x + (pw + 12) / 2, ry = ropeY(cx), sw = Math.sin(t * 1.3 + i * 1.7) * .012, rot = (hsh(i + 3) - .5) * .06 + sw;
+    ctx.save(); ctx.globalAlpha = appear; ctx.translate(cx, ry); ctx.rotate(rot); ctx.translate(-cx, -ry + (1 - appear) * -24);
+    polaroid(p, x, ry + 8, pw, 0);
+    ctx.fillStyle = '#B88A52'; ctx.fillRect(cx - 3, ry - 5, 6, 16); ctx.fillStyle = '#8E6A3A'; ctx.fillRect(cx - 3, ry + 4, 6, 2);
+    const tag = p.impact ? ['Terdampak', '#C8402E'] : p.kind === 'threat' ? ['Ancaman', '#C8402E'] : p.kind === 'target' ? ['Langka', '#D89A2A'] : p.albino ? ['Albino', '#8A7AA8'] : null;
+    if (tag) { font(10, 700); const tw = ctx.measureText(tag[0]).width + 14; rrect(x + pw + 12 - tw - 4, ry + 14, tw, 17, 8); ctx.fillStyle = tag[1]; ctx.fill(); text(tag[0], x + pw + 12 - tw + 3, ry + 26.5, 10, '#fff', 'left', 700); }
     ctx.restore();
   });
-  if (!n) text('(belum ada foto untuk dipamerkan)', W / 2, 200, 16, '#7A5E40', 'center', 500);
-  // villagers
-  const cols = ['#C8573A', '#3A6E9A', '#E0A030', '#4E8A55', '#8A4A7A', '#D8783A', '#2E5E5A', '#B84A4A'];
-  for (let i = 0; i < 11; i++) { const vx = 50 + i * 82 + (hsh(i) - .5) * 20, vy = 470 + (i % 2) * 18, bob = Math.sin(t * 2 + i) * 1.5, sk = ['#8A5A3A', '#B07850', '#6E4A30'][i % 3];
-    ctx.fillStyle = cols[i % cols.length]; ctx.beginPath(); ctx.moveTo(vx - 22, H); ctx.quadraticCurveTo(vx - 22, vy - 18 + bob, vx, vy - 20 + bob); ctx.quadraticCurveTo(vx + 22, vy - 18 + bob, vx + 22, H); ctx.fill();
-    ellG(vx, vy - 34 + bob, 12, 13, 0, sk); if (i % 3 === 0) { ctx.fillStyle = '#2A2A2A'; ctx.beginPath(); ctx.ellipse(vx, vy - 40 + bob, 13, 8, 0, Math.PI, PI2); ctx.fill(); } else if (i % 3 === 1) { ctx.fillStyle = ['#E8D2A0', '#3A6E9A'][i % 2]; ctx.beginPath(); ctx.ellipse(vx, vy - 38 + bob, 14, 10, 0, Math.PI * .9, Math.PI * 2.1); ctx.fill(); } }
+  if (!n) text('(belum ada foto untuk dipamerkan)', W / 2, 200, 16, '#7E5E40', 'center', 500);
+  // spotlights on the wall
+  ctx.save(); ctx.globalCompositeOperation = 'soft-light'; for (let i = 0; i < Math.max(1, n); i++) { const cx = n ? x0 + i * (pw + 12 + gap) + (pw + 12) / 2 : W / 2; const g = ctx.createRadialGradient(cx, 170, 10, cx, 170, 150); g.addColorStop(0, 'rgba(255,240,200,.5)'); g.addColorStop(1, 'rgba(255,240,200,0)'); ctx.fillStyle = g; ctx.fillRect(cx - 150, 20, 300, 320); } ctx.restore();
+  // villagers seen from behind, looking up at the photos
+  for (let i = 0; i < 10; i++) drawVillager(i, t, n ? x0 + (i % n) * (pw + 12 + gap) + (pw + 12) / 2 : W / 2);
   // speech bubbles about the photos
   if (n) for (let k = 0; k < 3; k++) { const ph = (t * .5 + k * 1.3) % 4; if (ph > 2.6) continue; const p = X.photos[(Math.floor(t * .5 + k * 1.3) * 7 + k) % n]; const pool = EXPO_SAY[p.impact ? 'impact' : p.kind] || EXPO_SAY.animal;
-    const say = pool[(Math.floor(t * .5 + k) + k) % pool.length], vx = 120 + k * 300 + (Math.floor(t * .5) % 2) * 60, vy = 390; font(13, 600); const tw = ctx.measureText(say).width + 22;
+    const say = pool[(Math.floor(t * .5 + k) + k) % pool.length], vi = (k * 3 + Math.floor(t * .5 + k * 1.3) * 2) % 10, vx = clamp(52 + vi * 95, 90, W - 90), vy = (vi === 2 || vi === 7) ? 392 : 352; font(13, 600); const tw = ctx.measureText(say).width + 22;
     ctx.globalAlpha = Math.min(1, ph * 3, (2.6 - ph) * 3); rrect(vx - tw / 2, vy - 22, tw, 30, 14); ctx.fillStyle = '#FFFDF6'; ctx.fill(); ctx.beginPath(); ctx.moveTo(vx - 6, vy + 8); ctx.lineTo(vx + 4, vy + 8); ctx.lineTo(vx - 4, vy + 18); ctx.fill(); text(say, vx, vy - 2, 13, '#2A2A2A', 'center', 600); ctx.globalAlpha = 1; }
-  // ending card
-  const ea = clamp((t - (n * .35 + 2.2)) * 1.5, 0, 1);
-  if (ea > 0) { const E = ENDINGS[X.end]; ctx.globalAlpha = ea; ctx.fillStyle = 'rgba(12,20,15,.78)'; ctx.fillRect(0, 0, W, H);
-    rrect(150, 124, 660, 236, 18); ctx.fillStyle = '#17281E'; ctx.fill(); ctx.strokeStyle = E.col; ctx.lineWidth = 2; ctx.stroke();
-    text(E.title, W / 2, 172, 24, E.col, 'center', 800);
-    let yy = wrapText(E.text, 190, 214, 580, 23, 16, '#E6EDE7', 400);
-    text('Foto satwa: ' + X.A + ' spesies  ·  Foto ancaman & satwa terdampak: ' + X.T, W / 2, yy + 22, 13, '#B9CBBE', 'center', 600);
-    if (E.hint) text(E.hint, W / 2, yy + 46, 13, '#E8A27A', 'center', 600);
-    ctx.globalAlpha = 1;
-    if (ea >= 1) button(W / 2 - 100, 380, 200, 44, 'Lihat arsip desa', () => { G.screen = 'archive'; }, { primary: true });
-  } else button(W - 150, 20, 130, 36, 'Lewati', () => { G.expoT = 99; }, { size: 14 });
+  // stage 0: look at the photos; the player moves on with a button. Stage 1: the ending.
+  const allIn = t > n * .35 + .8;
+  if (G.expoStage === 0) {
+    if (allIn) button(W - 200, 18, 180, 40, 'Lihat hasil  →', () => { G.expoStage = 1; G.expoEndT = 0; }, { primary: true, size: 15 });
+    else button(W - 150, 20, 130, 36, 'Lewati', () => { G.expoT = n * .35 + 1; }, { size: 14 });
+    return;
+  }
+  G.expoEndT += 1 / 60; const ea = clamp(G.expoEndT * 1.2, 0, 1), E = ENDINGS[X.end];
+  ctx.globalAlpha = ea; ctx.fillStyle = 'rgba(12,20,15,.8)'; ctx.fillRect(0, 0, W, H);
+  rrect(150, 110, 660, 260, 18); ctx.fillStyle = '#17281E'; ctx.fill(); ctx.strokeStyle = E.col; ctx.lineWidth = 2; ctx.stroke();
+  text(E.title, W / 2, 160, 24, E.col, 'center', 800);
+  const tl = clamp((G.expoEndT - .4) * 1.4, 0, 1); ctx.globalAlpha = ea * tl;
+  let yy = wrapText(E.text, 190, 202, 580, 23, 16, '#E6EDE7', 400);
+  text('Foto satwa: ' + X.A + ' spesies  ·  Foto ancaman & satwa terdampak: ' + X.T, W / 2, yy + 26, 13, '#B9CBBE', 'center', 600);
+  if (E.hint) text(E.hint, W / 2, yy + 50, 13, '#E8A27A', 'center', 600);
+  ctx.globalAlpha = 1;
+  if (G.expoEndT > 1.6) { button(W / 2 - 210, 392, 200, 44, 'Lihat foto lagi', () => { G.expoStage = 0; }, { size: 15 }); button(W / 2 + 10, 392, 200, 44, 'Lihat arsip desa', () => { G.screen = 'archive'; }, { primary: true }); }
 }
 
 // ===== Art helpers =====
@@ -2439,11 +2506,16 @@ function drawSpotPreview(sp, x, y, w, h) {
 }
 
 // ===== Screens =====
+// A centered row of polaroids that fills the width, slightly staggered and tilted like prints on a table.
+function layoutRow(photos, y, maxW, gap) {
+  const n = photos.length; if (!n) return; const w = Math.min(maxW, (W - 80 - (n - 1) * gap) / n - 12), tot = n * (w + 12) + (n - 1) * gap;
+  photos.forEach((p, i) => { const x = (W - tot) / 2 + i * (w + 12 + gap); polaroid(p, x, y + (i % 2 ? 10 : 0) + (hsh(i + 7) - .5) * 6, w, (hsh(i + 1) - .5) * .07); });
+}
 function polaroid(p, x, y, w, rot) {
   const ih = w * FH / FW; ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0);
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(4, 5, w + 12, ih + 46);
   ctx.fillStyle = '#FBF8F1'; ctx.fillRect(0, 0, w + 12, ih + 46); ctx.drawImage(p.img, 6, 6, w, ih);
-  text(p.title, 8, ih + 24, 13, '#222', 'left', 700);
+  { let fs = 13; font(fs, 700); while (fs > 9 && ctx.measureText(p.title).width > w + 2) { fs -= .5; font(fs, 700); } text(p.title, 8, ih + 24, fs, '#222', 'left', 700); }
   if (p.kind !== 'none') text((p.kind === 'animal' || p.kind === 'target' ? p.q + '%' + (p.mom ? ' · momen' : '') + ' · ' : '') + '+' + p.score, 8, ih + 40, 12, '#666', 'left', 500);
   ctx.restore();
 }
@@ -2617,17 +2689,25 @@ function drawRegion() {
   if (G.selSpot === shown) button(px + 14, py + ph - 54, pw - 28, 40, 'Mulai sesi foto', () => startSession(shown), { primary: true, size: 16 });
   else text('Klik titik untuk memilih', px + pw / 2, py + ph - 26, 13, '#9FB5A5', 'center', 600);
 }
+// Photos in rows of 3 (3 + 2 for five shots), centered inside [ax, ax + aw].
+function layoutGrid(photos, ax, aw, y, gap, rowGap) {
+  const per = 3, w = (aw - (per - 1) * gap) / per - 12, ih = w * FH / FW, ch = ih + 46;
+  photos.forEach((p, i) => { const r = Math.floor(i / per), inRow = Math.min(per, photos.length - r * per), c = i % per;
+    const rw = inRow * (w + 12) + (inRow - 1) * gap, x = ax + (aw - rw) / 2 + c * (w + 12 + gap);
+    polaroid(p, x, y + r * (ch + rowGap) + (hsh(i + 7) - .5) * 6, w, (hsh(i + 1) - .5) * .06); });
+}
 function drawSummary() {
   const d = G.lastDay;
   ctx.fillStyle = '#14231B'; ctx.fillRect(0, 0, W, H);
   text('Ringkasan Hari ' + G.day + ' · ' + d.spot.name, 40, 50, 26, '#FFF4E0', 'left', 800);
   text('Skor total: ' + G.total, W - 40, 50, 16, '#FFE2C7', 'right', 600);
-  if (!d.photos.length) text('Tidak ada foto hari ini.', 40, 130, 16, '#B9CBBE', 'left', 400);
-  d.photos.forEach((p, i) => { const c = i % 4, r = Math.floor(i / 4); polaroid(p, 40 + c * 224, 72 + r * 176, 182, (i % 2 ? 0.02 : -0.02)); });
-  let y = 436;
+  const PX = 668, PW = W - 40 - PX;
+  if (!d.photos.length) { rrect(40, 76, PX - 60, 340, 14); ctx.fillStyle = '#1A2C21'; ctx.fill(); text('Tidak ada foto hari ini.', 40 + (PX - 60) / 2, 250, 16, '#7E9A88', 'center', 500); }
+  layoutGrid(d.photos, 40, PX - 60, 76, 18, 16);
+  rrect(PX, 76, PW, 396, 14); ctx.fillStyle = '#1C3024'; ctx.fill();
   if (G.offerSwitch) {
-    rrect(40, 420, W - 80, 62, 12); ctx.fillStyle = '#2A3F31'; ctx.fill();
-    wrapText('Warga: "' + ((G.mission.villager || {})[G.region] || 'Belum pernah ada yang melihat ' + G.mission.short + ' di sini.') + ' ' + G.mission.hint + '"', 58, 446, W - 120, 20, 14, '#F2E8D5', 400);
+    text('Kata warga', PX + 18, 104, 13, '#E8A27A', 'left', 700);
+    wrapText('"' + ((G.mission.villager || {})[G.region] || 'Belum pernah ada yang melihat ' + G.mission.short + ' di sini.') + ' ' + G.mission.hint + '"', PX + 18, 132, PW - 36, 21, 14, '#F2E8D5', 400);
     button(W - 420, 492, 210, 38, 'Pindah daerah (1x)', () => { G.switchUsed = true; G.offerSwitch = false; G.day++; if (G.day > G.maxDays) { G.day = G.maxDays; goExpo(); } else G.screen = 'map'; }, { primary: true, size: 15 });
     button(W - 200, 492, 160, 38, 'Tetap di sini', () => { G.switchUsed = true; G.offerSwitch = false; nextDay(); }, { size: 15 });
     return;
@@ -2638,7 +2718,10 @@ function drawSummary() {
   d.clues.forEach(c => lines.push(['Petunjuk: ' + c.text, '#BFF0C2']));
   if (d.reports.length) lines.push(['Laporan terkirim ke desa: ' + d.reports.join(', '), '#FFC2B0']);
   if (!lines.length) lines.push(['Tidak ada petunjuk baru hari ini.', '#B9CBBE']);
-  lines.slice(0, 3).forEach(l => { text(l[0], 40, y, 14, l[1], 'left', 600); y += 20; });
+  text('Catatan hari ini', PX + 18, 104, 13, '#7E9A88', 'left', 700);
+  let y = 132; lines.slice(0, 5).forEach(l => { ellG(PX + 22, y - 5, 3, 3, 0, l[1]); y = wrapText(l[0], PX + 32, y, PW - 50, 19, 13.5, l[1], 600) + 28; });
+  const got = d.photos.filter(p => p.kind === 'animal' || p.kind === 'target').length;
+  text('Foto satwa: ' + got + '   ·   Jepretan: ' + d.photos.length, PX + 18, 456, 12.5, '#9FB5A6', 'left', 600);
   const last = G.day >= G.maxDays;
   if (G.targetFound && !last) button(W - 430, 492, 200, 38, 'Selesaikan misi', () => goExpo(), { size: 15 });
   button(W - 220, 492, 180, 38, last ? 'Lihat hasil misi' : 'Lanjut ke Hari ' + (G.day + 1), () => nextDay(), { primary: true, size: 15 });
