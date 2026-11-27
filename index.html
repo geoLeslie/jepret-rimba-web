@@ -112,7 +112,14 @@ const CALLS = {
   daralaut: p => { tone(2700, .11, 'sine', .03, 0, -800, p); tone(2500, .09, 'sine', .025, .16, -600, p); },
   biawak: p => hiss(p),
   kepiting: p => { tone(3100, .015, 'square', .014, 0, 0, p); tone(3300, .015, 'square', .014, .07, 0, p); tone(3000, .015, 'square', .012, .13, 0, p); },
-  tembakul: p => { tone(520, .06, 'sine', .025, 0, -260, p); }
+  tembakul: p => { tone(520, .06, 'sine', .025, 0, -260, p); },
+  badak: p => { tone(620, .35, 'sine', .03, 0, 380, p); tone(140, .3, 'sawtooth', .02, .4, -40, p); },
+  cendrawasih: p => { for (let i = 0; i < 4; i++) tone(820 - i * 30, .16, 'square', .022, i * .22, -260, p); },
+  rangkong: p => { tone(260, .14, 'sawtooth', .03, 0, -40, p); tone(240, .16, 'sawtooth', .03, .22, -40, p); },
+  julang: p => { tone(300, .12, 'sawtooth', .028, 0, -60, p); tone(280, .12, 'sawtooth', .028, .18, -60, p); tone(260, .12, 'sawtooth', .028, .36, -60, p); },
+  elang: p => { tone(1900, .5, 'sine', .022, 0, -700, p); },
+  tupai: p => { for (let i = 0; i < 5; i++) tone(2600 + Math.random() * 500, .03, 'square', .012, i * .06, 0, p); },
+  kakatua: p => { tone(1400, .28, 'sawtooth', .03, 0, -500, p); tone(1300, .24, 'sawtooth', .025, .3, -400, p); }
 };
 function sfxShutter() {
   if (!AC) return; const t = AC.currentTime; const n = Math.floor(AC.sampleRate * 0.08);
@@ -151,11 +158,22 @@ const SPECIES = {
   tembakul: { name: 'Ikan tembakul', latin: 'Periophthalmus sp.', pts: 20, shy: false },
   biawak: { name: 'Biawak air', latin: 'Varanus salvator', pts: 30, shy: true },
   kera: { name: 'Monyet ekor panjang', latin: 'Macaca fascicularis', pts: 25, shy: true },
-  daralaut: { name: 'Dara-laut', latin: 'Sterna sp.', pts: 20, shy: false }
+  daralaut: { name: 'Dara-laut', latin: 'Sterna sp.', pts: 20, shy: false },
+  badak: { name: 'Badak Sumatra', latin: 'Dicerorhinus sumatrensis', pts: 100, shy: true },
+  cendrawasih: { name: 'Cendrawasih kuning-besar', latin: 'Paradisaea apoda', pts: 100, shy: true },
+  rangkong: { name: 'Rangkong badak', latin: 'Buceros rhinoceros', pts: 40, shy: true },
+  julang: { name: 'Julang Papua', latin: 'Rhyticeros plicatus', pts: 40, shy: true },
+  elang: { name: 'Elang bondol', latin: 'Haliastur indus', pts: 30, shy: false },
+  tupai: { name: 'Bajing kelapa', latin: 'Callosciurus notatus', pts: 15, shy: true },
+  kakatua: { name: 'Kakatua jambul-kuning', latin: 'Cacatua galerita', pts: 35, shy: true }
 };
 const CLUEDEF = {
   ranting: { name: 'Ranting patah', pts: 10, to: 'pedada', bonus: 0.35, text: 'Ranting patah di tepi sungai. Bekantan mungkin bergerak ke arah Pohon Pedada.', pos: L => ({ x: L.canopy[0].x + 62, y: L.canopy[0].y + 26 }) },
   jejak: { name: 'Jejak di lumpur', pts: 10, to: 'sungai', bonus: 0.3, text: 'Jejak di lumpur bakau mengarah ke Tepi Sungai.', pos: L => ({ x: 470, y: L.groundY + 6 }) },
+  kubangan: { name: 'Kubangan lumpur segar', pts: 10, to: 'sum_hutan', bonus: 0.35, text: 'Kubangan lumpur masih basah. Badak berkubang di hutan, coba Kubangan Hutan.', pos: L => ({ x: 470, y: L.groundY + 10 }) },
+  jejakbadak: { name: 'Jejak kaki badak', pts: 10, to: 'sum_gambut', bonus: 0.3, text: 'Jejak berjari tiga mengarah ke Rawa Gambut.', pos: L => ({ x: 440, y: L.groundY + 8 }) },
+  bulu: { name: 'Bulu kuning cendrawasih', pts: 10, to: 'pap_hutan', bonus: 0.4, text: 'Bulu kuning panjang tersangkut di ranting. Cendrawasih menari di Pohon Tari.', pos: L => ({ x: L.canopy[1].x - 62, y: L.canopy[1].y + 18 }) },
+  buah: { name: 'Sisa buah ara dimakan', pts: 10, to: 'pap_sungai', bonus: 0.3, text: 'Sisa buah ara berserakan. Burung pemakan buah sering ke Tepi Sungai.', pos: L => ({ x: 450, y: L.groundY + 8 }) },
   daun: { name: 'Daun pedada bekas dimakan', pts: 10, to: 'pedada', bonus: 0.4, text: 'Daun pedada bekas dimakan. Bekantan sering makan di Pohon Pedada.', pos: L => ({ x: L.canopy[1].x - 62, y: L.canopy[1].y + 18 }) }
 };
 const THREATDEF = {
@@ -204,10 +222,10 @@ function branchY(L, x) {
 }
 for (const k in LAYOUTS) { const L = LAYOUTS[k]; const A = L.canopy[0], B = L.canopy[1]; L.perches = [A.x - 85 * A.sc, A.x + 85 * A.sc, B.x - 85 * B.sc, B.x + 85 * B.sc].map(x => ({ x, y: branchY(L, x) })); }
 const SPOTS = [
-  { id: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 150, y: 246 }, base: 0.35, fauna: ['pekakak', 'biawak', 'kera', 'kuntul'], clue: 'ranting', threat: 'sampah', event: { name: 'Golden hour', sign: 'Cahaya mulai keemasan...' }, desc: 'Pohon besar di tepi sungai. Satwa ramai menjelang sore.' },
-  { id: 'bakau', name: 'Hutan Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 384, y: 392 }, base: 0.2, fauna: ['kuntul', 'kepiting', 'tembakul', 'pekakak'], clue: 'jejak', threat: 'jerat', event: { name: 'Kabut tersibak', sign: 'Kabut mulai menipis...' }, desc: 'Akar bakau dan lumpur, berkabut di pagi hari.' },
-  { id: 'pedada', name: 'Pohon Pedada', time: 'Pagi', layout: 'pedada', pin: { x: 430, y: 186 }, base: 0.25, fauna: ['kera', 'pekakak', 'kuntul', 'tembakul'], clue: 'daun', threat: 'tunggul', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Pohon pedada berdaun lebat di tepi air.' },
-  { id: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 596, y: 446 }, base: 0.08, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: { name: 'Air pasang', sign: 'Air laut mulai pasang...' }, desc: 'Dataran lumpur luas tempat sungai bertemu laut.' }
+  { id: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 150, y: 246 }, base: 0.35, fauna: ['pekakak', 'biawak', 'kera', 'kuntul', 'rangkong', 'tupai', 'elang'], clue: 'ranting', threat: 'sampah', event: { name: 'Golden hour', sign: 'Cahaya mulai keemasan...' }, desc: 'Pohon besar di tepi sungai. Satwa ramai menjelang sore.' },
+  { id: 'bakau', name: 'Hutan Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 384, y: 392 }, base: 0.2, fauna: ['kuntul', 'kepiting', 'tembakul', 'pekakak', 'elang'], clue: 'jejak', threat: 'jerat', event: { name: 'Kabut tersibak', sign: 'Kabut mulai menipis...' }, desc: 'Akar bakau dan lumpur, berkabut di pagi hari.' },
+  { id: 'pedada', name: 'Pohon Pedada', time: 'Pagi', layout: 'pedada', pin: { x: 430, y: 186 }, base: 0.25, fauna: ['kera', 'pekakak', 'kuntul', 'tembakul', 'tupai', 'rangkong'], clue: 'daun', threat: 'tunggul', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Pohon pedada berdaun lebat di tepi air.' },
+  { id: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 596, y: 446 }, base: 0.08, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'elang'], clue: null, threat: 'lahan', event: { name: 'Air pasang', sign: 'Air laut mulai pasang...' }, desc: 'Dataran lumpur luas tempat sungai bertemu laut.' }
 ];
 // Spots per island. Kalimantan (the Bekantan's home) uses SPOTS above. Every other island
 // reuses the same four scene layouts and existing animals, but has its own spots, pins,
@@ -222,8 +240,9 @@ const EV = {
 const ISLANDSPOTS = {
   kalimantan: SPOTS,
   sumatra: [
-    { id: 'sum_gambut', icon: 'sungai', name: 'Rawa Gambut', time: 'Sore', layout: 'river', pin: { x: 186, y: 168 }, base: 0, fauna: ['pekakak', 'biawak', 'kera', 'kuntul'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai hitam berair gambut di tengah hutan rawa.' },
-    { id: 'sum_bakau', icon: 'bakau', name: 'Bakau Pantai Timur', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 150 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'pekakak'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Sabuk bakau panjang di pesisir timur yang landai.' },
+    { id: 'sum_gambut', icon: 'sungai', name: 'Rawa Gambut', time: 'Sore', layout: 'river', pin: { x: 186, y: 168 }, base: 0, fauna: ['pekakak', 'biawak', 'kera', 'kuntul', 'rangkong', 'tupai'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai hitam berair gambut di tengah hutan rawa.' },
+    { id: 'sum_hutan', icon: 'pedada', name: 'Kubangan Hutan', time: 'Pagi', layout: 'pedada', pin: { x: 280, y: 330 }, base: 0, fauna: ['rangkong', 'tupai', 'kera', 'pekakak', 'elang'], clue: null, threat: 'jerat', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Hutan dataran rendah dengan kubangan lumpur di bawah pohon besar.' },
+    { id: 'sum_bakau', icon: 'bakau', name: 'Bakau Pantai Timur', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 150 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'pekakak', 'elang'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Sabuk bakau panjang di pesisir timur yang landai.' },
     { id: 'sum_muara', icon: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 560, y: 336 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Sungai gambut bertemu laut, airnya cokelat kehitaman.' }
   ],
   jawa: [
@@ -244,8 +263,9 @@ const ISLANDSPOTS = {
     { id: 'mal_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 156, y: 366 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Bakau di teluk kecil antarpulau.' }
   ],
   papua: [
-    { id: 'pap_sungai', icon: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 174, y: 132 }, base: 0, fauna: ['kuntul', 'tembakul', 'kepiting', 'daralaut'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai besar berkelok di dataran rendah.' },
-    { id: 'pap_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 276 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Hutan bakau yang sangat luas di delta sungai.' },
+    { id: 'pap_sungai', icon: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 174, y: 132 }, base: 0, fauna: ['kakatua', 'julang', 'kuntul', 'tembakul', 'elang'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai besar berkelok di dataran rendah.' },
+    { id: 'pap_hutan', icon: 'pedada', name: 'Pohon Tari', time: 'Pagi', layout: 'pedada', pin: { x: 150, y: 330 }, base: 0, fauna: ['kakatua', 'julang', 'pekakak', 'elang'], clue: null, threat: 'tunggul', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Pohon tinggi di hutan dataran rendah, tempat burung jantan menari.' },
+    { id: 'pap_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 276 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'kakatua'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Hutan bakau yang sangat luas di delta sungai.' },
     { id: 'pap_muara', icon: 'muara', name: 'Muara Sungai', time: 'Siang', layout: 'estuary', pin: { x: 552, y: 444 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Delta lumpur tempat sungai besar bertemu laut.' }
   ]
 };
@@ -260,12 +280,28 @@ const VILLAGER = {
   papua: 'Bakau kami luas, tapi monyet hidung panjang tidak hidup di Papua.'
 };
 const MISSIONS = [
-  { id: 'bekantan', name: 'Bekantan', latin: 'Nasalis larvatus', region: 'kalimantan', open: true,
-    brief: 'Desa butuh foto Bekantan untuk data konservasi. Monyet berhidung panjang ini hidup di hutan bakau dan tepi sungai, di pulau yang berbagi daratan dengan Malaysia dan Brunei.' },
-  { id: 'tarsius', name: 'Tarsius', open: false },
-  { id: 'cendrawasih', name: 'Cendrawasih', open: false },
-  { id: 'penyu', name: 'Penyu hijau', open: false }
+  { id: 'bekantan', name: 'Bekantan', latin: 'Nasalis larvatus', region: 'kalimantan', open: true, short: 'monyet hidung panjang',
+    brief: 'Desa butuh foto Bekantan untuk data konservasi. Monyet berhidung panjang ini hidup di hutan bakau dan tepi sungai, di pulau yang berbagi daratan dengan Malaysia dan Brunei.',
+    hint: 'Katanya ia hidup di pulau yang berbagi daratan dengan Malaysia dan Brunei.', villager: VILLAGER,
+    fact: 'Bekantan hanya hidup di Pulau Kalimantan dan bergantung pada hutan bakau serta hutan tepi sungai. Statusnya terancam punah (IUCN: Endangered). Setiap foto menjadi data, dan setiap laporan membantu desa menjaga habitatnya.' },
+  { id: 'badak', name: 'Badak Sumatra', latin: 'Dicerorhinus sumatrensis', region: 'sumatra', open: true, short: 'badak berbulu',
+    brief: 'Badak terkecil di dunia dan satu-satunya badak Asia yang berbulu. Ia sangat pemalu, berkubang di lumpur hutan dataran rendah dan rawa di pulau paling barat Indonesia.',
+    hint: 'Katanya badak berbulu itu masih bertahan di hutan pulau paling barat Indonesia.',
+    spotBase: { sum_gambut: 0.3, sum_hutan: 0.35, sum_bakau: 0.05, sum_muara: 0 }, clues: { sum_gambut: 'kubangan', sum_bakau: 'jejakbadak', sum_hutan: 'jejakbadak' },
+    villager: { kalimantan: 'Dulu ada badak di pedalaman, tapi sekarang hampir tak pernah terlihat lagi di sini.', jawa: 'Di Jawa ada badak bercula satu, di ujung barat. Badak berbulu tidak ada di sini.' },
+    fact: 'Badak Sumatra berstatus Kritis (IUCN: Critically Endangered). Di alam diperkirakan tinggal puluhan ekor saja. Ia butuh hutan yang utuh dan kubangan lumpur untuk menjaga kulitnya. Setiap foto dan laporan membantu desa menjaga hutan tempatnya bertahan.' },
+  { id: 'cendrawasih', name: 'Cendrawasih', latin: 'Paradisaea apoda', region: 'papua', open: true, short: 'burung surga berbulu kuning',
+    brief: 'Burung surga dengan bulu kuning keemasan yang panjang. Yang jantan menari di dahan tinggi sambil memamerkan bulunya. Ia hidup di hutan dataran rendah pulau besar di ujung timur Indonesia.',
+    hint: 'Katanya burung surga itu hidup di pulau besar paling timur.',
+    spotBase: { pap_hutan: 0.35, pap_sungai: 0.25, pap_bakau: 0.05, pap_muara: 0 }, clues: { pap_sungai: 'bulu', pap_bakau: 'buah', pap_hutan: 'buah' },
+    villager: { maluku: 'Di Maluku ada burung bidadari, kerabatnya. Tapi cendrawasih kuning-besar hidup lebih ke timur.' },
+    fact: 'Cendrawasih kuning-besar hidup di hutan dataran rendah Papua dan Kepulauan Aru. Bulunya dulu diburu untuk hiasan, kini semua jenis cendrawasih dilindungi undang-undang. Setiap foto dan laporan membantu desa menjaga hutan tempatnya menari.' }
 ];
+function tgtId() { return G.mission ? G.mission.id : 'bekantan'; }
+function tgtName() { return SPECIES[tgtId()].name; }
+function spotBase(spot) { const m = G.mission; return m && m.spotBase ? (m.spotBase[spot.id] || 0) : spot.base; }
+function spotClue(spot) { const m = G.mission; return m && m.clues ? (m.clues[spot.id] || null) : spot.clue; }
+
 // ===== Pixel map (Natural Earth, public domain; 320x180 grid in the style of Percikan Lentera) =====
 const GW = 320, GH = 180, CELL = 3;
 const MAPRLE = "00z10500o10200210u02210100h10500210300310100210100110204010500t10t02310200g10400210400210200510103z10600s10l00110602510200g10100310100110400210200110100310203y10500u10100410h00110202710200110100h10100110400210300410303y10500v10200310f02910200o10300210200610303v10100110100110301010100110800110302910300o10300110200610200310103t10100110501310800210102810300o10300110200310300410100210103v10401310900110102710100p10500110200110500a10103s10400510100w10b02710200p10500110100210400710103w10401210800210102610300p10500110100d10200110103s10601110902810200r10400f10303s10600210200x10802910200u10300e10403r10b00w10502a10200w10200210100710100510403q10b00w10402a10301910100110803p10b00w10402910301a10a03p10b00x10202910201210100810a03p10d03610201110100110300410100110b03p10d04810500310e03p10100210a04810500310e03p10100210a04410r03o10100410903210100y10s03u10904110300110500210i03t10700110104110200210200110100510g03v10604110200310100810h01g10102d10100110603310100v10200310100910a00110501g10101b10101210603310100v10300c10a00210402t10201210703a10100m10200c10b00310302u10101210900110202t10100210101910a00410204010b02s10200110200v10100d10900410104110c02r10500u10300c10900410103z10100210c02p10900s10100d10a04710c02n10a00i10100o10904710e02k10a01910904710e02j10a00210100j10300m10300110303920100x10f02h10f00j10100q10303820100z10g02f10i01910103a20500u10h02c10100110k00d10104520500t10i02a10q01410103b20700220300220100j10j02a10p00510104a20g00i10j02a10n00510104d20g00h10k02410100310j04o20h00h10j00u20101810o04p20g00h10j02110r04p20h00f10j01z10u01j50103520g00f10k01x10d40110140110140510300110301k50203620e00g10j01y10c40c10240104w20e00g10h00v20201010c40d00140101n50103920g00d10i00v20200z10d40f01n50103c20d00e10h00v20200y10e40f01n50103d20e00d10g01u10f40c00340101e50103m20f00c10f01t10g40e05320g00c10e00j20101810h40d05520h00a10e00i20101810i40d05620h00910e00f20100d20100640100n10j40g04u20100b20g00910f00h20101010n40h04u20200b20h00810f01g10o40i01e50103h20100920h00a10e00y40100g10p40i01y70102x20100820i00b10c01d10100110n40l01c50100i70303220100520h00220100810c01c10o40m00340101o70100370202y20100320200620g00120300220100510a01c10o40k01e70100g70100270103d20i00120200610a00z40110100a10o40k01u70103h20l00810800y40310100810o40n01a50100g70303f20100120k00a10700x40310500410o40o01850200g70303720200820p00610600w40410h40510940r01750300f70300270303220200920o00610100110200y40610e40810340x00e50200n50400870100670400170403220300820o00c20200t40810d41800e50400k50400g70300270403320300720m00120200120200120100320200220100120100h40100940910540210341c00a50100150900e50400i70100270403520200820q00320100120200120100120100t40a10141d00240400950100250e00150400350500j70100170303820100820r00220200320100120100t41n00f50v00h70701480102c20s01241m00g50u00k70703g20q00120201041m00f50300j50800l70200270403f20u00420100v41k00g50201b70100270100670103a20200420t00320200u41k00g50101f70103f20100920q00520100u41k00e50100150101d70100170100a70100880103520o00720300t41j00f50200a50100350200z70200f80300180302t20100820q00520100u41k00f50200c50200x70100370200i80100180202s20100a20o00520200u41l00e50200b50100z70400170200b70100480100980602t20m00620100x41i00f50200i50400r70100370100p80902s20l01341k00d50100150200d50900o70100170100170100270100f80100680g00a80302b20m01341f00f50700650200250500350100x70100g80100280i00c80201y20200a20r00x40200141c00g50700550a01h80200280j00580100580301x20300920r00v40100140100341b00f50800550900250200s70200e70100580200180k02c20300920q01141900h50a00250900250200150200p70100170100m80m02b20300a20p00820200j40100741800i50k00450100t70400p80g00780100g80101o20300920p00620200120200h40100841700j50h00950100150100550300h70500p80f00980500880601y20o00620500p41800j50d00150200950100850670700n80400a80g00c80400380a01w20p00420600r41600j50e00g50100250300y80300c80e00k80c01l20100820r00520400q41500j50g00t70101480c00180100180100h80f01k20100720q00720300q41700h50i00r70101880100880100f80m01q20v00120300q41700h50i02380100280100180300180100b80r01f20100720u00220600520300e41600h50k01s70100880300180100180300180100b80u01c20200720u00120500620400e41400h50b00450601w80300180c00980y10201a20100720t00320200320100120100120500c40200140700140u00h50a00550701470600270300f80i00880x10401920100720v00320200520400g40400440800140k00i50900650801170100170f00e80g00680y10401a20100720u00a20100120100p40800240100140h00i50a00550900o70700470200170g00e80f00580z10401j20s01340300140200640400140b00140100h50a00450900p70700370100470300170400270600d80g00381010401k20r01340100g40e00g50300150600350b00o70800470100d70600c80100180400181c10401m20o01n40800140300k50600450800650100k70700570200170300a70300e80400181c10401m20p01m40600340200l50600550900r70300o70200d80400481a10401n20o01m40400640100m50500750800u70101180400580100180100181510401o20m01n40100w50500850700150301h70200a80200a81610301p20l02k50500850900150101w70100881610301q20k02k50500850902981410301r20k02j50500850400550201870100b70100s80y10301t20i02j50600750300450100150202f80w10301u20g01u40100o50600a50200150300150102j80t10301w20f02i50600e50302n80q10301x20d02j50600a50100250200150102p80o10301y20c02i50700a50100250200150300250102m80m10301m20100c20b02i50700f50201o70101380l10302020200120300120302j50300150100150100e50200550101k70100270100170100970100n80k10302120100120100120100320101930103p70100970400n80j10302220100620100u30104470100a70300o80i10302b30300130100230303250101w70300o80i10302a30c02d50102j70400o80i10302a30f00130104s70100270200n80i10302a30i00f30204a70400p80g10402520100330j00e30304a70200170100q80f10402630n00d30803a70100c70100g70200t80f10402d30r00130e00230800830204980h10302f31400130800230100130100730100v50201g70101u80g10302e31700430101c50101y70100270101880200280c10302f31601n50101p70200170101a80200180e10302l30z02q70100e70100770100270201880500180d10302n30600130s00630102770100270300s70401780600180d10303130v02470400l70100170100770201780l10303330t02370100p70100970101780m10303630p00560200g60200660100o60100s60100370100l70101880900180300280710303c30200130g00160700560200660100160300160100b60200860100760400160200360500210100h70100470101m80500180100880710303o30700360600260500260200460700760700860100160200160100160200260200160100e10401x80100h80510303s30400460200460400260600360500360100160g00260300360100c10c02h80410303v30200560100460300160a00160200260100360j00i10c02j80310304760300160800j60400260100l10a02n80210304b60501d10160110602r80110305r60410402u10205p10260410207q60700p60310160410107r60800n60907u60100160700k60807z60600j60708160500k60508360300i6050hc60200860108k60100960208s6030am10108v10108h10100410200210200110300q10107p10900310400110108e10100110600710408c10800910408g10100b10800110100b10100310108610a00310100510200410107v10100910h00110300110100210200110107t10900110n00310407p10100111307r11507q11407q11707p11500110107q11400110107q11207r11407s11507710200i11500410106x10100410400g11500310206z10100110600d11700310206u10100210b00b11700710106v10c00a11606z10i00c11206z10l00911207110j00210400311400110106v10100310r00111306x10w00111406s10100110200110j00111h06q10100112506p12806o12a00210100s10105r12b00t101";
@@ -397,7 +433,7 @@ function tiledMirror(off, w, fn) {
 
 // ===== Entities =====
 function ent(o) { return Object.assign({ t: 0, alpha: 0, dead: false, aimT: 0, fleeing: false, kind: 'animal', f: 1, sc: 1 }, o); }
-const SCALE = {};
+const SCALE = { cendrawasih: 1.45, rangkong: 1.1, julang: 1.1 };
 function scaled(e) { e.sc = SCALE[e.type] || 1; const c0 = e.c; e.c = () => { const c = c0(); return { x: e.x + (c.x - e.x) * e.sc, y: e.y + (c.y - e.y) * e.sc }; }; return e; }
 function fadeIn(e, d) { if (e.t < d) e.alpha = e.t / d; else e.alpha = Math.max(e.alpha, 1); }
 
@@ -451,7 +487,7 @@ function mkPekaka(L) {
   return e;
 }
 function mkKuntul(L) {
-  const e = ent({ type: 'kuntul', x: rnd(viewL() + 100, viewR() - 260), y: L.waterY, f: pick([1, -1]), life: rnd(10, 14), state: 'walk', st: 0, next: rnd(1.6, 3) });
+  const e = ent({ type: 'kuntul', x: rnd(viewL() + 100, viewR() - 260), y: L.kind === 'estuary' ? rnd(410, 466) : L.waterY, f: pick([1, -1]), life: rnd(10, 14), state: 'walk', st: 0, next: rnd(1.6, 3) });
   e.upd = dt => {
     if (e.state === 'fly') { e.x += e.f * 140 * dt; e.y -= 95 * dt; if (e.y < -90 || offScreen(e, 90)) e.dead = true; return; }
     fadeIn(e, 0.6); e.st += dt;
@@ -563,7 +599,7 @@ function mkDaralaut(L) {
   };
   return e;
 }
-const MAKERS = { pekakak: mkPekaka, kuntul: mkKuntul, kepiting: mkKepiting, tembakul: mkTembakul, biawak: mkBiawak, kera: mkKera, daralaut: mkDaralaut };
+const MAKERS = { pekakak: mkPekaka, kuntul: mkKuntul, kepiting: mkKepiting, tembakul: mkTembakul, biawak: mkBiawak, kera: mkKera, daralaut: mkDaralaut, rangkong: L => mkRangkong(L, false), julang: L => mkRangkong(L, true), elang: mkElang, tupai: mkTupai, kakatua: mkKakatua };
 function mkClue(id, L) {
   const p = placeIn(CLUEDEF[id].pos, viewL() + W * 0.35, L); const px = p.x;
   const e = ent({ type: id, kind: 'clue', x: px, y: p.y, life: 13 });
@@ -585,6 +621,256 @@ function infoOf(e) {
   if (e.kind === 'threat') return { name: THREATDEF[e.type].name, latin: 'Laporan ancaman', pts: THREATDEF[e.type].pts };
   return SPECIES[e.type];
 }
+
+// ===== Mission targets & extra fauna =====
+// Badak Sumatra (Dicerorhinus sumatrensis): the smallest rhino, reddish-brown and hairy, two horns, a fold behind the shoulder.
+const RH = { skin: '#6E5244', skinD: '#4E382C', skinL: '#8E6E5A', hair: '#5A3E30', mud: '#7A6248', mudD: '#5E4A36', horn: '#C9B79A', hornD: '#9C8A70', eye: '#1A100A' };
+function drawBadak(x, y, f, pose, t, look) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const walk = pose === 'walk' || pose === 'trot', sp = pose === 'trot' ? 14 : 7, s = walk ? Math.sin(t * sp) : 0;
+  const graze = pose === 'graze', bob = walk ? Math.abs(Math.sin(t * sp)) * 1.5 : Math.sin(t * 1.4) * .5;
+  shadow(0, 2, 48);
+  const leg = (lx, ph, far) => { const sw = walk ? Math.sin(t * sp + ph) * 7 : 0, lift = walk ? Math.max(0, Math.sin(t * sp + ph + 1.6)) * 3 : 0; const c = far ? RH.skinD : RH.skin, fx = lx + sw * .5;
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(lx - 10, -34); ctx.bezierCurveTo(lx - 11, -20, fx - 7, -14, fx - 6, -3 - lift); ctx.lineTo(fx + 6, -3 - lift); ctx.bezierCurveTo(fx + 6, -14, lx + 10, -20, lx + 9, -34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = far ? 'rgba(94,74,54,.8)' : 'rgba(122,98,72,.8)'; ctx.beginPath(); ctx.moveTo(fx - 7, -14 - lift); ctx.lineTo(fx + 7, -14 - lift); ctx.lineTo(fx + 6.5, -3 - lift); ctx.lineTo(fx - 6.5, -3 - lift); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3A2A1E'; ctx.beginPath(); ctx.moveTo(fx - 7, -3 - lift); ctx.quadraticCurveTo(fx, -6 - lift, fx + 7, -3 - lift); ctx.lineTo(fx + 7, -lift); ctx.lineTo(fx - 7, -lift); ctx.closePath(); ctx.fill();
+    for (const d of [-4, 0, 4]) ell(fx + d, -1 - lift, 1.8, 1.2, '#8E7A62'); };
+  leg(-26, 1.6, true); leg(20, 0, true);
+  // body
+  ctx.fillStyle = lg(0, -64 - bob, 0, -18, [RH.skinL, RH.skin, RH.skinD]);
+  ctx.beginPath(); ctx.moveTo(-46, -34 - bob); ctx.bezierCurveTo(-50, -58 - bob, -20, -66 - bob, 8, -62 - bob); ctx.bezierCurveTo(30, -60 - bob, 40, -52 - bob, 40, -38 - bob);
+  ctx.bezierCurveTo(40, -24 - bob, 20, -18 - bob, -6, -18 - bob); ctx.bezierCurveTo(-30, -18 - bob, -46, -22 - bob, -46, -34 - bob); ctx.closePath(); ctx.fill();
+  // dried mud on the lower body and legs
+  ctx.fillStyle = 'rgba(122,98,72,.75)'; ctx.beginPath(); ctx.moveTo(-44, -30 - bob); ctx.quadraticCurveTo(-10, -22 - bob, 36, -32 - bob); ctx.quadraticCurveTo(34, -20 - bob, -6, -18 - bob); ctx.quadraticCurveTo(-36, -18 - bob, -44, -30 - bob); ctx.fill();
+  // skin fold behind the shoulder, hair
+  curve(16, -60 - bob, 12, -42 - bob, 18, -24 - bob, 2.2, RH.skinD);
+  ctx.strokeStyle = 'rgba(60,40,28,.5)'; ctx.lineWidth = 1; for (let i = 0; i < 14; i++) { const hx = -40 + i * 5.5; ctx.beginPath(); ctx.moveTo(hx, -60 - bob + Math.abs(hx) * .05); ctx.lineTo(hx - 1.5, -55 - bob + Math.abs(hx) * .05); ctx.stroke(); }
+  ell(-46, -40 - bob, 3, 7, RH.skinD); curve(-47, -38 - bob, -52, -32 - bob, -50, -24 - bob, 2.4, RH.hair);
+  leg(-18, 0, false); leg(28, 1.6, false);
+  // head
+  const hy = graze ? -22 : look ? -50 : -42, hx = graze ? 56 : 52;
+  ctx.save(); ctx.translate(36, -46 - bob); ctx.rotate(graze ? .5 : look ? -.12 : .05);
+  ctx.fillStyle = lg(0, -14, 0, 16, [RH.skinL, RH.skin, RH.skinD]);
+  ctx.beginPath(); ctx.moveTo(-4, -12); ctx.bezierCurveTo(10, -16, 24, -10, 30, 0); ctx.bezierCurveTo(32, 8, 28, 14, 20, 14); ctx.bezierCurveTo(10, 15, 0, 12, -6, 8); ctx.closePath(); ctx.fill();
+  // horns: larger front, small rear
+  ctx.fillStyle = RH.horn; ctx.beginPath(); ctx.moveTo(22, -4); ctx.quadraticCurveTo(26, -18, 32, -24); ctx.quadraticCurveTo(30, -12, 30, -2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = RH.hornD; ctx.beginPath(); ctx.moveTo(12, -11); ctx.quadraticCurveTo(14, -17, 17, -19); ctx.quadraticCurveTo(17, -13, 18, -10); ctx.closePath(); ctx.fill();
+  ell(29, 9, 3, 2, RH.skinD); seg(22, 12, 29, 11, RH.skinD, 1.2);
+  ell(8, -4, 1.8, 1.8, RH.eye); ell(8.5, -4.6, .6, .6, '#fff'); curve(5, -6, 8, -8, 11, -6, 1, RH.skinD);
+  // ears with hair fringe; they flick
+  const ear = Math.sin(t * 3) > .9 ? -.4 : 0;
+  ctx.save(); ctx.translate(-2, -12); ctx.rotate(-.5 + ear); ell(0, -6, 3.6, 7, RH.skin); ell(0, -6, 2, 5, RH.skinD); ctx.strokeStyle = RH.hair; ctx.lineWidth = .9; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i, -12); ctx.lineTo(i * 1.6, -16); ctx.stroke(); } ctx.restore();
+  if (look) { ctx.save(); ctx.translate(3, -12); ctx.rotate(.3); ell(0, -6, 3.4, 6.6, RH.skin); ctx.restore(); }
+  ctx.restore();
+  if (graze) { for (let i = 0; i < 4; i++) seg(hx + 10 + i * 3, 2, hx + 9 + i * 3, -6 - (i % 2) * 3, '#6E9A44', 1.4); }
+  ctx.restore();
+}
+function mkBadak(L) {
+  const dir = -1, gy = L.groundY + (L.kind === 'estuary' ? 6 : 0);
+  const start = viewL() + W * 0.34;
+  const e = ent({ type: 'badak', kind: 'target', alpha: 0, f: dir, x: start, y: gy, phase: 'enter', pt: 0 });
+  const D = { enter: 2.6, graze: 2.4, look: 1.8, graze2: 2.2, walk2: 2.0, look2: 1.4, leave: 2.6 }, next = { enter: 'graze', graze: 'look', look: 'graze2', graze2: 'walk2', walk2: 'look2', look2: 'leave' };
+  e.upd = dt => {
+    e.pt += dt; const ph = e.phase, k = Math.min(1, e.pt / D[ph]);
+    if (ph === 'enter') { e.x += dir * 22 * dt; e.alpha = Math.min(1, e.pt / 1.2); }
+    else if (ph === 'walk2') e.x += dir * 18 * dt;
+    else if (ph === 'leave') { e.x += e.f * (e.fleeing ? 70 : 24) * dt; e.alpha = 1 - k; if (k >= 1) e.dead = true; }
+    if (k >= 1 && next[ph]) { e.phase = next[ph]; e.pt = 0; }
+  };
+  e.flee = () => { e.fleeing = true; e.phase = 'leave'; e.pt = 0; e.f = toScreenX(e.x) < W / 2 ? -1 : 1; D.leave = 1.6; };
+  e.pose = () => e.phase === 'graze' || e.phase === 'graze2' ? 'graze' : e.phase === 'look' || e.phase === 'look2' ? 'stand' : e.fleeing ? 'trot' : 'walk';
+  e.moment = () => (e.phase === 'look' || e.phase === 'look2') && e.pt > .3;
+  e.c = () => ({ x: e.x + e.f * 10, y: e.y - 40 });
+  e.draw = () => drawBadak(e.x, e.y, e.f, e.pose(), e.t, e.moment() || e.alert);
+  return e;
+}
+// Cendrawasih kuning-besar (Paradisaea apoda): maroon-brown body, yellow crown, emerald throat, golden flank plumes, two tail wires.
+function drawCendrawasih(x, y, f, pose, t, k) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const disp = pose === 'display', fly = pose === 'fly', shiv = disp ? Math.sin(t * 22) * 1.2 : 0, bob = disp ? Math.sin(t * 6) * 2 : 0;
+  const plume = (ang, len, spread) => { for (let i = 0; i < 9; i++) { const a = ang + (i - 4) * spread, l = len * (.8 + (i % 3) * .1);
+    const ex = Math.cos(a) * l, ey = Math.sin(a) * l; ctx.strokeStyle = i % 2 ? '#F6D24A' : '#FBE58A'; ctx.lineWidth = 2.6 - i * .12; ctx.beginPath(); ctx.moveTo(-6, -14 + bob); ctx.quadraticCurveTo(ex * .5 - 4, ey * .5 - 10 + bob + shiv, ex - 6, ey - 12 + bob + shiv); ctx.stroke();
+    ell(ex - 6, ey - 12 + bob + shiv, 2, 1.2, 'rgba(255,250,225,.8)', a); } };
+  if (!fly) { seg(-2, -2, -3, 2, '#7A8AA0', 1.6); seg(3, -2, 3, 2, '#7A8AA0', 1.6); shadow(0, 2, 8); }
+  // tail wires
+  ctx.strokeStyle = '#3A2418'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10, -10 + bob); ctx.bezierCurveTo(-30, -4, -44, 10, -40, 30 + Math.sin(t * 2) * 3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-10, -9 + bob); ctx.bezierCurveTo(-26, 2, -32, 18, -26, 34 + Math.sin(t * 2 + 1) * 3); ctx.stroke();
+  if (disp) plume(-Math.PI / 2 - .75, 46, .12); else if (!fly) plume(Math.PI * .86, 40, .05); else plume(Math.PI * .95, 34, .04);
+  // body
+  ctx.save(); ctx.translate(0, bob); ctx.rotate(disp ? -.35 : fly ? -.2 : -.1);
+  ell(-2, -14, 11, 8, '#5A2E1E'); ell(0, -15, 10, 7, '#6E3A24'); ell(-4, -12, 7, 4, '#4E2818');
+  // wing: forward and raised in display, flapping in flight
+  const wa = fly ? Math.sin(t * 18) * .9 : disp ? -1.1 + Math.sin(t * 8) * .15 : 0;
+  ctx.save(); ctx.translate(-2, -17); ctx.rotate(wa); ctx.fillStyle = '#4A2416'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-12, -4, -18, 4); ctx.quadraticCurveTo(-8, 6, 0, 4); ctx.closePath(); ctx.fill(); ctx.restore();
+  // head: yellow crown & nape, emerald throat, blue-grey bill
+  ell(9, -23, 6.5, 6, '#F2D34A'); ell(11, -19, 5, 4, '#1E7A4E'); ell(12, -18, 3, 2.4, '#34A86A');
+  ctx.fillStyle = '#9CB2C8'; ctx.beginPath(); ctx.moveTo(14, -23); ctx.lineTo(21, -21); ctx.lineTo(14, -20); ctx.closePath(); ctx.fill();
+  ell(12, -24, 1.4, 1.4, '#F6E070'); ell(12.2, -24, .7, .7, '#1A100A');
+  ctx.restore();
+  ctx.restore();
+}
+function mkCendrawasih(L) {
+  const vp = perchesIn(L, viewL() + 60, viewL() + W * .55); const p = vp.length ? vp[vp.length - 1] : { x: viewL() + W * .35, y: branchYW(L, viewL() + W * .35) };
+  const from = Math.random() < .5 ? -1 : 1;
+  const e = ent({ type: 'cendrawasih', kind: 'target', alpha: 1, f: -from, x: p.x + from * 260, y: p.y - 140, phase: 'in', pt: 0, px: p.x, py: p.y, sx: p.x + from * 260, sy: p.y - 140 });
+  const D = { in: 1.6, sit: 1.8, hop: .6, display: 3.2, sit2: 1.6, display2: 2.4, out: 1.8 }, next = { in: 'sit', sit: 'hop', hop: 'display', display: 'sit2', sit2: 'display2', display2: 'out' };
+  e.upd = dt => {
+    e.pt += dt; const ph = e.phase, k = Math.min(1, e.pt / D[ph]);
+    if (ph === 'in') { e.x = lerp(e.sx, e.px, k); e.y = lerp(e.sy, e.py, k) - Math.sin(Math.PI * k) * 30; }
+    else if (ph === 'hop') { const nx = e.px + e.f * 26; e.x = lerp(e.px, nx, k); e.y = lerp(e.py, branchYW(L, nx), k) - Math.sin(Math.PI * k) * 14; if (k >= 1) { e.px = nx; e.py = branchYW(L, nx); } }
+    else if (ph === 'out') { e.x += e.f * 180 * dt; e.y -= 110 * dt; if (k >= 1 || e.y < -60) e.dead = true; }
+    else { e.x = e.px; e.y = e.py; }
+    if (k >= 1 && next[ph]) { e.phase = next[ph]; e.pt = 0; if (e.phase === 'display' || e.phase === 'display2') CALLS.cendrawasih(panOf(clamp(toScreenX(e.x), 0, W))); }
+  };
+  e.flee = () => { e.fleeing = true; if (e.phase !== 'out') { e.phase = 'out'; e.pt = 0; e.f = toScreenX(e.x) < W / 2 ? -1 : 1; } };
+  e.pose = () => e.phase === 'in' || e.phase === 'out' || e.phase === 'hop' ? 'fly' : e.phase.startsWith('display') ? 'display' : 'sit';
+  e.moment = () => e.phase.startsWith('display') && e.pt > .3;
+  e.c = () => ({ x: e.x, y: e.y - 20 });
+  e.draw = () => drawCendrawasih(e.x, e.y, e.f, e.pose(), e.t);
+  return e;
+}
+// Rangkong badak (Buceros rhinoceros) / Julang Papua (Rhyticeros plicatus): big black hornbills with a heavy casqued bill.
+function drawRangkong(x, y, f, pose, t, papua) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const fly = pose === 'fly', call = pose === 'call';
+  if (!fly) { shadow(0, 2, 12); seg(-2, -2, -3, 2, '#3A3A3A', 2); seg(4, -2, 4, 2, '#3A3A3A', 2); }
+  // tail
+  ctx.fillStyle = '#F4F1E8'; ctx.beginPath(); ctx.moveTo(-12, -14); ctx.lineTo(-34, fly ? -10 : 4); ctx.lineTo(-30, fly ? -4 : 9); ctx.lineTo(-10, -8); ctx.closePath(); ctx.fill();
+  if (!papua) { ctx.fillStyle = '#1C1C1E'; ctx.beginPath(); ctx.moveTo(-24, fly ? -12 : -3); ctx.lineTo(-28, fly ? -11 : 1); ctx.lineTo(-24, fly ? -7 : 4); ctx.lineTo(-20, fly ? -8 : -1); ctx.closePath(); ctx.fill(); }
+  ell(0, -16, 15, 10, '#1C1C1E', -.15); ell(2, -12, 9, 5, papua ? '#2A2A2A' : '#F2EEE4', -.15);
+  const wa = fly ? Math.sin(t * 7) * 1.1 : 0;
+  ctx.save(); ctx.translate(-2, -20); ctx.rotate(wa - (fly ? .3 : 0)); ctx.fillStyle = '#26262A'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(-18, -6, -30, 6); ctx.quadraticCurveTo(-10, 8, 4, 6); ctx.closePath(); ctx.fill();
+  if (fly) { ctx.fillStyle = '#F2EEE4'; ctx.beginPath(); ctx.moveTo(-20, 3); ctx.quadraticCurveTo(-26, 4, -30, 6); ctx.lineTo(-22, 7); ctx.closePath(); ctx.fill(); } ctx.restore();
+  // neck & head
+  const hr = call ? -.5 : 0; ctx.save(); ctx.translate(12, -22); ctx.rotate(hr);
+  ell(2, -4, 6, 7, papua ? '#E8C87A' : '#1C1C1E'); ell(3, -8, 5, 5, papua ? '#E8C87A' : '#1C1C1E');
+  if (papua) ell(4, -1, 4, 4, '#F2F0E6');
+  ell(5, -9, 1.6, 1.6, '#C8322A'); ell(5.2, -9.2, .6, .6, '#1A0A08');
+  // bill + casque
+  ctx.fillStyle = '#F4E6A8'; ctx.beginPath(); ctx.moveTo(7, -10); ctx.quadraticCurveTo(24, -8, 30, call ? -2 : 2); ctx.quadraticCurveTo(22, -2, 7, -5); ctx.closePath(); ctx.fill();
+  if (call) { ctx.fillStyle = '#E8D48A'; ctx.beginPath(); ctx.moveTo(7, -5); ctx.quadraticCurveTo(20, 2, 26, 8); ctx.quadraticCurveTo(18, 2, 7, -3); ctx.closePath(); ctx.fill(); }
+  if (papua) { for (let i = 0; i < 4; i++) seg(9 + i * 2.5, -12, 9 + i * 2.5, -10, '#C8A85A', 1); }
+  else { ctx.fillStyle = '#E8642A'; ctx.beginPath(); ctx.moveTo(6, -12); ctx.quadraticCurveTo(14, -20, 26, -14); ctx.quadraticCurveTo(22, -10, 8, -10); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#F2A23A'; ctx.beginPath(); ctx.moveTo(14, -14); ctx.quadraticCurveTo(20, -17, 25, -14); ctx.lineTo(17, -12); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  ctx.restore();
+}
+function mkRangkong(L, papua) {
+  const vp = perchesIn(L, viewL() + 80, viewR() - 160); const p = vp.length ? pick(vp) : { x: viewL() + W * .5, y: branchYW(L, viewL() + W * .5) };
+  const from = Math.random() < .5 ? -1 : 1;
+  const e = ent({ type: papua ? 'julang' : 'rangkong', alpha: 1, f: -from, x: p.x + from * 300, y: p.y - 120, state: 'in', st: 0, px: p.x, py: p.y, sx: p.x + from * 300, sy: p.y - 120, wait: rnd(2.4, 4) });
+  e.upd = dt => {
+    e.st += dt;
+    if (e.state === 'in') { const k = Math.min(1, e.st / 2); e.x = lerp(e.sx, e.px, k); e.y = lerp(e.sy, e.py, k) - Math.sin(Math.PI * k) * 20; if (k >= 1) { e.state = 'perch'; e.st = 0; } }
+    else if (e.state === 'perch' && e.st > e.wait) { e.state = 'call'; e.st = 0; if (CALLS[e.type]) CALLS[e.type](panOf(clamp(toScreenX(e.x), 0, W))); }
+    else if (e.state === 'call' && e.st > 1.3) { e.state = 'fly'; e.st = 0; }
+    else if (e.state === 'fly') { e.x += e.f * 120 * dt; e.y -= 60 * dt; if (e.y < -60 || offScreen(e, 80)) e.dead = true; }
+  };
+  e.flee = () => { if (e.state === 'perch' || e.state === 'call') { e.state = 'fly'; e.st = 0; } };
+  e.moment = () => e.state === 'call' || (e.state === 'fly' && e.st < 1) || (e.state === 'in' && e.st > 1.2);
+  e.c = () => ({ x: e.x + e.f * 6, y: e.y - 20 });
+  e.draw = () => drawRangkong(e.x, e.y, e.f, e.state === 'in' || e.state === 'fly' ? 'fly' : e.state, e.t, papua);
+  return e;
+}
+// Elang bondol (Haliastur indus): chestnut with a white head and breast; soars, then stoops to snatch from the water.
+function drawElang(x, y, f, pose, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const stoop = pose === 'stoop', flap = Math.sin(t * (pose === 'rise' ? 9 : 2.2)) * (pose === 'soar' ? .12 : .6);
+  if (stoop) ctx.rotate(.9);
+  const wing = s => { ctx.save(); ctx.scale(1, s); ctx.rotate(-flap * s); ctx.fillStyle = '#9A4A22'; ctx.beginPath(); ctx.moveTo(-6, 0); ctx.quadraticCurveTo(-4, -26, stoop ? -10 : 6, stoop ? -22 : -40); ctx.lineTo(stoop ? -4 : 12, stoop ? -20 : -36); ctx.quadraticCurveTo(10, -14, 8, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#2A1810'; ctx.lineWidth = 1.2; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo((stoop ? -8 : 6) + i * 1.6, (stoop ? -20 : -38) + i * 1.5); ctx.lineTo((stoop ? -11 : 4) + i * 1.6, (stoop ? -26 : -44) + i * 1.5); ctx.stroke(); } ctx.restore(); };
+  wing(1);
+  ctx.fillStyle = '#A85226'; ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-28, -4); ctx.lineTo(-28, 4); ctx.closePath(); ctx.fill();
+  ell(0, 0, 14, 5, '#A85226'); ell(6, -1, 7, 4, '#F4F0E6'); ell(13, -2, 5, 4, '#F6F2EA');
+  ctx.fillStyle = '#E8C04A'; ctx.beginPath(); ctx.moveTo(17, -3); ctx.quadraticCurveTo(21, -2, 19, 1); ctx.lineTo(17, 0); ctx.closePath(); ctx.fill();
+  ell(15, -3, .9, .9, '#1A100A');
+  wing(-1);
+  if (stoop) { seg(-2, 4, 2, 12, '#E8C04A', 1.6); seg(2, 4, 6, 12, '#E8C04A', 1.6); }
+  ctx.restore();
+}
+function mkElang(L) {
+  const f = pick([1, -1]); const wy = L.kind === 'estuary' ? 360 : L.kind === 'mangrove' ? 400 : L.waterY + 4;
+  const e = ent({ type: 'elang', alpha: 1, f, x: f === 1 ? viewL() - 60 : viewR() + 60, y: rnd(70, 130), state: 'soar', st: 0, by: 0, dove: false });
+  e.by = e.y;
+  e.upd = dt => {
+    e.st += dt;
+    if (e.state === 'soar') { e.x += e.f * 50 * dt; e.y = e.by + Math.sin(e.t * .8) * 14; if (!e.dove && e.t > 2.5 && !offScreen(e, -140) && Math.random() < dt * .7) { e.state = 'stoop'; e.st = 0; e.sy = e.y; e.dove = true; } }
+    else if (e.state === 'stoop') { const k = Math.min(1, e.st / .9); e.y = lerp(e.sy, wy, k * k); e.x += e.f * 70 * dt; if (k >= 1) { e.state = 'rise'; e.st = 0; } }
+    else if (e.state === 'rise') { const k = Math.min(1, e.st / 1.4); e.y = lerp(wy, e.by, k); e.x += e.f * 90 * dt; if (k >= 1) e.state = 'soar'; }
+    if (e.t > 2 && offScreen(e, 90)) e.dead = true;
+  };
+  e.flee = () => {};
+  e.moment = () => e.state === 'stoop' || (e.state === 'rise' && e.st < .5);
+  e.c = () => ({ x: e.x, y: e.y });
+  e.draw = () => { if (e.state === 'rise' && e.st < .4) { ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(e.x - e.f * 20, wy + 4, 8 + e.st * 60, 2 + e.st * 10, 0, 0, PI2); ctx.stroke(); } drawElang(e.x, e.y, e.f, e.state, e.t); };
+  return e;
+}
+// Bajing kelapa (Callosciurus notatus): runs along the branch, sits up to nibble, flicks its bushy tail.
+function drawTupai(x, y, f, pose, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const run = pose === 'run', s = run ? Math.sin(t * 20) : 0, flick = pose === 'flick' ? Math.sin(t * 16) * .5 : 0;
+  ctx.save(); ctx.translate(-8, -6); ctx.rotate(run ? -.9 : -1.6 + flick);
+  ctx.fillStyle = '#6E5236'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(4, -10, 16, -14, 20, -6); ctx.bezierCurveTo(22, 2, 10, 6, 0, 3); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(210,190,160,.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(4, -6); ctx.quadraticCurveTo(14, -12, 19, -5); ctx.stroke(); ctx.restore();
+  if (run) { ell(0, -6, 9, 5, '#7A5C3C'); ell(1, -3, 7, 2.4, '#D07A3A'); seg(-5, -3, -7 + s * 3, 0, '#5A4430', 1.6); seg(5, -3, 7 - s * 3, 0, '#5A4430', 1.6); ell(10, -8, 4.5, 4, '#7A5C3C'); ell(13, -8, 2.2, 1.8, '#8E6E4A'); ell(11, -9, .9, .9, '#140C06'); ell(8, -12, 1.4, 2, '#6E5236'); }
+  else { ell(0, -10, 6, 9, '#7A5C3C'); ell(2, -9, 3.6, 6.5, '#D07A3A'); seg(-2, -10, 6, -9, '#F2E6D2', .8); ell(3, -20, 5, 4.6, '#7A5C3C'); ell(6, -19, 2.4, 2, '#8E6E4A'); ell(4, -21, 1, 1, '#140C06'); ell(1, -24, 1.4, 2.2, '#6E5236');
+    const nib = Math.sin(t * 14) * .8; ell(6, -15 + nib, 2.4, 2, '#A8C25A'); seg(4, -13, 6, -15 + nib, '#7A5C3C', 1.4); shadow(0, 1, 6); }
+  ctx.restore();
+}
+function mkTupai(L) {
+  const tr = treesIn(L, viewL() + 40, viewL() + W * .6); const c = tr.length ? pick(tr) : treesIn(L, viewL() - 300, viewR() + 300)[0];
+  const span = 112 * (c.sc || 1), lo = c.x - span, hi = c.x + span, dir = pick([1, -1]), x0 = dir === 1 ? lo + 6 : hi - 6;
+  const e = ent({ type: 'tupai', x: x0, y: branchYW(L, x0), f: dir, state: 'run', st: 0, legs: 0, runFor: rnd(.6, 1.1) });
+  e.upd = dt => {
+    e.st += dt; fadeIn(e, .3);
+    if (e.state === 'run' || e.state === 'gone') { e.x += e.f * (e.state === 'gone' ? 90 : 70) * dt; if (e.x < lo || e.x > hi) { if (e.state === 'gone') { e.x = clamp(e.x, lo, hi); e.alpha -= dt * 3; } else { e.x = clamp(e.x, lo, hi); e.f = -e.f; } } e.y = branchYW(L, e.x); }
+    if (e.state === 'run' && e.st > e.runFor) { e.legs++; e.state = e.legs > 3 ? 'gone' : pick(['sit', 'flick']); e.st = 0; e.runFor = rnd(.6, 1.1); }
+    else if ((e.state === 'sit' && e.st > 1.8) || (e.state === 'flick' && e.st > 1)) { e.state = 'run'; e.st = 0; if (Math.random() < .4) e.f = -e.f; }
+    else if (e.state === 'gone') { e.alpha -= dt * 1.2; if (e.alpha <= 0) e.dead = true; }
+  };
+  e.flee = () => { e.state = 'gone'; e.st = 0; };
+  e.moment = () => e.state === 'flick' || (e.state === 'sit' && e.st > .4);
+  e.c = () => ({ x: e.x, y: e.y - 10 });
+  e.draw = () => drawTupai(e.x, e.y, e.f, e.state === 'gone' ? 'run' : e.state, e.t);
+  return e;
+}
+// Kakatua jambul-kuning (Cacatua galerita): white, raises its yellow crest and spreads its wings.
+function drawKakatua(x, y, f, pose, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const crest = pose === 'crest', fly = pose === 'fly', bob = crest ? Math.sin(t * 9) * 1.5 : 0;
+  if (!fly) { shadow(0, 2, 9); seg(-2, -2, -3, 2, '#6A6A6A', 1.8); seg(3, -2, 3, 2, '#6A6A6A', 1.8); }
+  ctx.fillStyle = '#F2F2EE'; ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(-18, fly ? -6 : 6); ctx.lineTo(-12, fly ? -2 : 8); ctx.lineTo(-2, -4); ctx.closePath(); ctx.fill();
+  ell(0, -14 + bob, 9, 12, '#F6F6F2', -.2); ell(-2, -10 + bob, 6, 8, '#E6E6E0', -.2);
+  const wa = fly ? Math.sin(t * 14) * 1 : crest ? -1.2 : 0;
+  ctx.save(); ctx.translate(-2, -18 + bob); ctx.rotate(wa); ctx.fillStyle = '#ECECE6'; ctx.beginPath(); ctx.moveTo(2, 0); ctx.quadraticCurveTo(-12, -2, -20, 8); ctx.quadraticCurveTo(-8, 8, 2, 6); ctx.closePath(); ctx.fill();
+  if (crest || fly) { ctx.fillStyle = 'rgba(242,210,74,.55)'; ctx.beginPath(); ctx.moveTo(-6, 4); ctx.quadraticCurveTo(-14, 4, -18, 8); ctx.lineTo(-8, 7); ctx.closePath(); ctx.fill(); } ctx.restore();
+  ell(6, -26 + bob, 7, 6.5, '#F8F8F4');
+  ctx.save(); ctx.translate(4, -30 + bob);
+  for (let i = 0; i < 5; i++) { const a = crest ? -2.3 + i * .22 : -2.9 + i * .08, l = crest ? 14 - i : 9; ctx.fillStyle = i % 2 ? '#F6D23A' : '#FBE26A'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(Math.cos(a) * l * .5 - 2, Math.sin(a) * l * .5, Math.cos(a) * l, Math.sin(a) * l); ctx.quadraticCurveTo(Math.cos(a) * l * .5 + 2, Math.sin(a) * l * .5 + 2, 3, 1); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  ell(10, -27 + bob, 3, 2.6, '#2A2A2E'); ctx.fillStyle = '#2A2A2E'; ctx.beginPath(); ctx.moveTo(11, -25 + bob); ctx.quadraticCurveTo(15, -24 + bob, 12, -20 + bob); ctx.lineTo(10, -23 + bob); ctx.closePath(); ctx.fill();
+  ell(7, -28 + bob, 1.2, 1.2, '#1A1A1A'); ell(7, -28 + bob, 2.2, 2.2, 'rgba(170,210,240,.5)');
+  ctx.restore();
+}
+function mkKakatua(L) {
+  const vp = perchesIn(L, viewL() + 60, viewR() - 160); const p = vp.length ? pick(vp) : { x: viewL() + W * .4, y: branchYW(L, viewL() + W * .4) };
+  const from = pick([1, -1]);
+  const e = ent({ type: 'kakatua', alpha: 1, f: -from, x: p.x + from * 240, y: p.y - 100, state: 'in', st: 0, px: p.x + rnd(-16, 16), py: 0, sx: p.x + from * 240, sy: p.y - 100, wait: rnd(1.6, 3) });
+  e.py = branchYW(L, e.px);
+  e.upd = dt => {
+    e.st += dt;
+    if (e.state === 'in') { const k = Math.min(1, e.st / 1.3); e.x = lerp(e.sx, e.px, k); e.y = lerp(e.sy, e.py, k) - Math.sin(Math.PI * k) * 16; if (k >= 1) { e.state = 'perch'; e.st = 0; } }
+    else if (e.state === 'perch' && e.st > e.wait) { e.state = 'crest'; e.st = 0; if (CALLS.kakatua) CALLS.kakatua(panOf(clamp(toScreenX(e.x), 0, W))); }
+    else if (e.state === 'crest' && e.st > 1.6) { e.state = Math.random() < .5 ? 'perch' : 'fly'; e.st = 0; e.wait = rnd(1.5, 2.5); }
+    else if (e.state === 'fly') { e.x += e.f * 150 * dt; e.y -= 70 * dt; if (e.y < -60 || offScreen(e, 80)) e.dead = true; }
+    if (e.t > 14 && e.state === 'perch') { e.state = 'fly'; e.st = 0; }
+  };
+  e.flee = () => { if (e.state !== 'fly') { e.state = 'fly'; e.st = 0; } };
+  e.moment = () => e.state === 'crest' || (e.state === 'fly' && e.st < .8);
+  e.c = () => ({ x: e.x, y: e.y - 18 });
+  e.draw = () => drawKakatua(e.x, e.y, e.f, e.state === 'in' || e.state === 'fly' ? 'fly' : e.state, e.t);
+  return e;
+}
+const TARGETMK = { bekantan: L => mkBekantan(L), badak: L => mkBadak(L), cendrawasih: L => mkCendrawasih(L) };
 
 // ===== Art helpers =====
 const PI2 = Math.PI * 2;
@@ -831,6 +1117,7 @@ function drawDaralaut(x, y, f, hov, t) {
 function drawClue(id, x, y, t) {
   const pulse = 0.22 + 0.18 * Math.sin(t * 3);
   ctx.strokeStyle = 'rgba(255,238,170,' + pulse + ')'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 24, 0, PI2); ctx.stroke();
+  if (id === 'kubangan' || id === 'jejakbadak' || id === 'bulu' || id === 'buah') { drawClue2(id, x, y, t); return; }
   if (id === 'ranting') {
     curve(x - 26, y - 22, x - 10, y - 10, x + 2, y + 2, 5, '#5A4330');
     ctx.fillStyle = '#E9D7B4'; ctx.beginPath(); ctx.moveTo(x - 1, y - 1); ctx.lineTo(x + 6, y + 1); ctx.lineTo(x + 2, y + 5); ctx.lineTo(x + 4, y + 8); ctx.lineTo(x - 2, y + 4); ctx.closePath(); ctx.fill();
@@ -854,6 +1141,12 @@ function drawClue(id, x, y, t) {
     }
     ell(x + 10, y + 12, 3.5, 3.5, '#6E9A47'); ctx.strokeStyle = '#4E7A34'; ctx.lineWidth = 1; for (let k = 0; k < 6; k++) { const a = k / 6 * PI2; seg(x + 10, y + 12, x + 10 + Math.cos(a) * 5, y + 12 + Math.sin(a) * 5, '#4E7A34', 1); }
   }
+}
+function drawClue2(id, x, y, t) {
+  if (id === 'kubangan') { ell(x, y + 4, 40, 9, '#4E3A28'); ell(x, y + 3, 36, 7, '#6E5A40'); ell(x - 6, y + 2, 24, 4, 'rgba(150,170,175,.55)'); ell(x + 10, y + 1, 8, 1.6, 'rgba(255,255,255,.35)'); for (let i = 0; i < 5; i++) ell(x - 30 + i * 15, y + 9 + (i % 2) * 2, 4, 2, '#3E2E20'); }
+  else if (id === 'jejakbadak') { for (let i = 0; i < 3; i++) { const px = x - 20 + i * 20, py = y + (i % 2 ? -3 : 3); ell(px, py, 7, 5, '#4E3D2B'); ell(px, py - .5, 5.6, 3.8, '#5F4C37'); for (const d of [-1, 0, 1]) ell(px + 5 + Math.abs(d), py + d * 4, 2.4, 1.8, '#4E3D2B'); } }
+  else if (id === 'bulu') { const sw = Math.sin(t * 2) * 3; curve(x - 18, y - 10, x - 4, y - 14, x + 14, y - 8, 2, '#5A4A2E'); for (let i = 0; i < 6; i++) { ctx.strokeStyle = i % 2 ? '#F6D24A' : '#FBE58A'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x - 2, y - 12); ctx.quadraticCurveTo(x + 2 + i, y + 6, x + sw + i * 2 - 4, y + 22 + i); ctx.stroke(); } }
+  else if (id === 'buah') { for (let i = 0; i < 7; i++) { const px = x - 22 + i * 7, py = y + (i % 3) * 2; ell(px, py, 4, 3.4, i % 2 ? '#9A3A4A' : '#B85A3A'); if (i % 3 === 0) ell(px + 1, py - 1, 1.6, 1.2, '#F2C8A0'); } ell(x, y + 6, 26, 2, 'rgba(0,0,0,.15)'); }
 }
 // Threats
 function drawThreat(id, x, y, t) {
@@ -972,10 +1265,10 @@ function drawLimbs(L, ci, R) {
   const sh = (SPP[c.sp] && SPP[c.sp].shape) || c.sp, tw0 = (sh === 'meranti' ? 8 : sh === 'apiapi' ? 7 : 9) * sc;
   const tTop = c.y - 30 * sc - (sh === 'meranti' ? 58 * sc : 0), tBase = L.base;
   const halfW = y => { const t = clamp((y - tBase) / (tTop - tBase), 0, 1); return ((1 - t) * (1 - t) * 1.75 + 2 * (1 - t) * t * .9 + t * t * .6) * tw0; };
-  const G = lg(c.x - tw0 * 1.6, 0, c.x + tw0 * 1.6, 0, BK);
+  const G = ctx.createLinearGradient(c.x - span, 0, c.x + span, 0); { const e = tw0 * 1.6 / (2 * span); G.addColorStop(0, shade(BK[1], .04)); G.addColorStop(Math.max(.01, .5 - e * 2.2), BK[1]); G.addColorStop(.5 - e, BK[0]); G.addColorStop(.5, BK[1]); G.addColorStop(.5 + e, BK[2]); G.addColorStop(Math.min(.99, .5 + e * 2.2), BK[1]); G.addColorStop(1, shade(BK[1], -.06)); }
   // trunk keeps rising above the fork into the crown, with two support limbs (hidden by leaves higher up)
   const lean = (R() - .5) * 14 * sc; growBranch(c.x, c.y + 30 * sc, -Math.PI / 2 + lean / 120, 120 * sc, Math.max(14 * sc * P.th, tw0 * 1.4), 0, R, G, [], 0);
-  for (const sd of [-1, 1]) { const tw = []; growBranch(c.x + lean * .3, c.y - 14 * sc, -Math.PI / 2 + sd * (.55 + R() * .25), (60 + R() * 20) * sc, 5.5 * sc * P.th, 1, R, G, tw, .01); }
+  for (const sd of [-1, 1]) { const tw = []; growBranch(c.x + lean * .3, c.y - 14 * sc, -Math.PI / 2 + sd * (.55 + R() * .25), (60 + R() * 20) * sc, 5.5 * sc * P.th, 1, R, BK[1], tw, .01); }
   const N = 24, K0 = 7, S = {};
   for (const side of [-1, 1]) {
     const knots = [[.3 + R() * .15, (2 + R() * 2) * sc], [.6 + R() * .25, (1.5 + R() * 2) * sc]];
@@ -987,21 +1280,20 @@ function drawLimbs(L, ci, R) {
     }
     S[side] = { top, bot };
   }
-  const yJ = c.y + 64 * sc, hJ = halfW(yJ);
+  const yJ = c.y + 64 * sc, hJ = halfW(yJ), KL = 5 + Math.floor(R() * 4), KR = 5 + Math.floor(R() * 4), tL = .5 + R() * .3, tR = .5 + R() * .3;
   ctx.fillStyle = G; ctx.beginPath(); ctx.moveTo(c.x - hJ, yJ + 3);
-  { const T = S[-1], b = T.bot[K0]; ctx.bezierCurveTo(c.x - hJ * 1.02, yJ - (yJ - b[1]) * .65, b[0] + span * .1, b[1] + 3 * sc, b[0], b[1]);
-    for (let k = K0 + 1; k <= N; k++) ctx.lineTo(T.bot[k][0], T.bot[k][1]); for (let k = N; k >= 0; k--) ctx.lineTo(T.top[k][0], T.top[k][1]); }
-  { const T = S[1]; for (let k = 0; k <= N; k++) ctx.lineTo(T.top[k][0], T.top[k][1]); for (let k = N; k >= K0; k--) ctx.lineTo(T.bot[k][0], T.bot[k][1]);
-    const b = T.bot[K0]; ctx.bezierCurveTo(b[0] - span * .1, b[1] + 3 * sc, c.x + hJ * 1.02, yJ - (yJ - b[1]) * .65, c.x + hJ, yJ + 3); }
+  { const T = S[-1], b = T.bot[KL]; ctx.bezierCurveTo(c.x - hJ * 1.02, yJ - (yJ - b[1]) * tL, b[0] + span * (.06 + R() * .08), b[1] + (2 + R() * 4) * sc, b[0], b[1]);
+    for (let k = KL + 1; k <= N; k++) ctx.lineTo(T.bot[k][0], T.bot[k][1]); for (let k = N; k >= 0; k--) ctx.lineTo(T.top[k][0], T.top[k][1]); }
+  { const T = S[1]; for (let k = 0; k <= N; k++) ctx.lineTo(T.top[k][0], T.top[k][1]); for (let k = N; k >= KR; k--) ctx.lineTo(T.bot[k][0], T.bot[k][1]);
+    const b = T.bot[KR]; ctx.bezierCurveTo(b[0] - span * (.06 + R() * .08), b[1] + (2 + R() * 4) * sc, c.x + hJ * 1.02, yJ - (yJ - b[1]) * tR, c.x + hJ, yJ + 3); }
   ctx.closePath(); ctx.fill();
-  // bark grain flowing from the trunk up into the limbs
-  ctx.lineWidth = 1.1; ctx.strokeStyle = 'rgba(25,16,10,.25)';
-  for (let i = -2; i <= 2; i++) { const sd = i < 0 ? -1 : i > 0 ? 1 : (R() < .5 ? -1 : 1), T = S[sd], k = 6 + Math.abs(i) * 2, e = T.top[k], f = .45 + Math.abs(i) * .12;
-    curve(c.x + i * hJ * .32, yJ + 12, c.x + i * hJ * .3, c.y + 26 * sc, e[0], lerp(e[1], T.bot[k][1], f), 1.1, 'rgba(25,16,10,.25)'); }
+  // soft shade under the fork and a few short trunk streaks that fade out below it
+  { const g = ctx.createRadialGradient(c.x, c.y + 22 * sc, 2, c.x, c.y + 22 * sc, 30 * sc); g.addColorStop(0, 'rgba(25,16,10,.22)'); g.addColorStop(1, 'rgba(25,16,10,0)'); ctx.fillStyle = g; ctx.fillRect(c.x - 34 * sc, c.y + 12 * sc, 68 * sc, 50 * sc); }
+  for (let i = -2; i <= 2; i++) { const x0 = c.x + i * hJ * .3; const g = ctx.createLinearGradient(0, yJ + 14, 0, c.y + 30 * sc); g.addColorStop(0, 'rgba(25,16,10,.25)'); g.addColorStop(1, 'rgba(25,16,10,0)'); ctx.strokeStyle = g; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(x0, yJ + 14); ctx.quadraticCurveTo(x0 + i * 1.5, (yJ + c.y + 30 * sc) / 2, x0 + i * 3 * sc, c.y + 30 * sc); ctx.stroke(); }
   for (const side of [-1, 1]) {
     const { top, bot } = S[side];
     // underside shadow, top light, bark streaks
-    ctx.strokeStyle = 'rgba(25,16,10,.3)'; ctx.lineWidth = 2 * sc; ctx.beginPath(); bot.forEach((p, k) => k > K0 + 2 ? ctx.lineTo(p[0], p[1] - 1) : k === K0 + 2 ? ctx.moveTo(p[0], p[1] - 1) : 0); ctx.stroke();
+    ctx.strokeStyle = 'rgba(25,16,10,.3)'; ctx.lineWidth = 2 * sc; ctx.beginPath(); bot.forEach((p, k) => k > 11 ? ctx.lineTo(p[0], p[1] - 1) : k === 11 ? ctx.moveTo(p[0], p[1] - 1) : 0); ctx.stroke();
     ctx.strokeStyle = 'rgba(255,225,180,.28)'; ctx.lineWidth = 1.3; ctx.beginPath(); top.forEach((p, k) => k > 5 ? ctx.lineTo(p[0], p[1] + .7) : k === 5 ? ctx.moveTo(p[0], p[1] + .7) : 0); ctx.stroke();
     ctx.strokeStyle = 'rgba(30,20,12,.28)'; ctx.lineWidth = .9;
     for (let b = 0; b < 6; b++) { const d0 = .32 + R() * .55, d1 = d0 + .06 + R() * .08, k0 = Math.round(d0 * N), k1 = Math.min(N, Math.round(d1 * N)), f = .35 + R() * .4;
@@ -1089,7 +1381,7 @@ function growBranch(x, y, ang, len, w, depth, R, col, tips, curl) {
   const w1 = w * .55, L = [], Rr = [];
   for (let k = 0; k <= n; k++) { const p = pts[k], q = pts[Math.min(n, k + 1)], o = pts[Math.max(0, k - 1)]; let dx = q[0] - o[0], dy = q[1] - o[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d; const hw = lerp(w, w1, k / n) / 2; L.push([p[0] - dy * hw, p[1] + dx * hw]); Rr.push([p[0] + dy * hw, p[1] - dx * hw]); }
   ctx.fillStyle = col; ctx.beginPath(); L.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); for (let k = n; k >= 0; k--) ctx.lineTo(Rr[k][0], Rr[k][1]); ctx.closePath(); ctx.fill();
-  if (w > 2.4) { ctx.strokeStyle = 'rgba(255,232,196,.22)'; ctx.lineWidth = Math.max(.8, w * .18); ctx.lineCap = 'round'; ctx.beginPath(); (Math.cos(ang) > 0 ? Rr : L).forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); }
+  if (w > 2.4) { ctx.strokeStyle = 'rgba(255,232,196,.12)'; ctx.lineWidth = Math.max(.8, w * .18); ctx.lineCap = 'round'; ctx.beginPath(); (Math.cos(ang) > 0 ? Rr : L).forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); }
   const end = pts[n];
   if (depth <= 0) { tips.push([end[0], end[1], a]); return; }
   const mid = pts[3 + Math.floor(R() * 2)], up = Math.cos(a) > 0 ? -1 : 1;
@@ -1529,7 +1821,7 @@ function drawParts(parts) {
 }
 
 // ===== Markers =====
-const MARK_OFF = { sampah: 30, jerat: 64, tunggul: 46, lahan: 60, ranting: 38, jejak: 30, daun: 36 };
+const MARK_OFF = { sampah: 30, jerat: 64, tunggul: 46, lahan: 60, ranting: 38, jejak: 30, daun: 36, kubangan: 30, jejakbadak: 30, bulu: 36, buah: 30 };
 function drawMarker(x, y, kind, done, t) {
   y += Math.sin(t * 3) * 3;
   const col = done ? '#3FA45E' : kind === 'threat' ? '#E2553A' : '#EFB22A';
@@ -1630,12 +1922,12 @@ function toast(msg, col) { if (SS) SS.toasts.push({ msg, col: col || '#FFFFFF', 
 function startSession(spot) {
   const L = layoutFor(spot);
   const ok = G.regionCorrect;
-  let p = ok ? Math.min(0.9, spot.base + (G.bonus[spot.id] || 0) + (G.reported[spot.id] ? 0.05 : 0)) : 0;
+  let p = ok ? Math.min(0.9, spotBase(spot) + (G.bonus[spot.id] || 0) + (G.reported[spot.id] ? 0.05 : 0)) : 0;
   const guarantee = ok && !G.appearedEver && G.day >= G.maxDays; // right island: it always shows on the last day
   if (guarantee) p = 1;
   const tgt = Math.random() < p;
   SS = { spot, L, WL: null, X0: 0, t: 0, dur: 40, shots: SHOTS, ents: [], nextSpawn: 2.5, tgtAt: tgt ? rnd(guarantee ? 5 : 7, guarantee ? 14 : 22) : -1, tgtSpawned: false,
-    clueAt: (ok && spot.clue) ? rnd(5, 22) : -1, clueSpawned: false, evSignaled: false, evOn: false, ev: 0, flash: 0, last: null, lastT: 9,
+    clueAt: (ok && spotClue(spot)) ? rnd(5, 22) : -1, clueSpawned: false, evSignaled: false, evOn: false, ev: 0, flash: 0, last: null, lastT: 9,
     parts: [], toasts: [], dayPhotos: [], dayClues: [], dayReports: [], sawTarget: false, gotTargetToday: false, ended: false, lastShotT: -9, pending: false, drive: 0 };
   if (DRIVE_SPEED) { SS.WL = wideLayout(L, Math.ceil(DRIVE_SPEED * SS.dur)); SS.X0 = W - SS.WL.width; getLayers(SS.WL); }
   if (!G.reported[spot.id] && spot.threat) SS.ents.push(mkThreat(spot.threat, L));
@@ -1644,7 +1936,7 @@ function startSession(spot) {
 }
 function spawnAnimal() {
   const s = SS; const type = pick(s.spot.fauna);
-  const e = scaled(MAKERS[type](s.L)); e.t = 0; s.ents.push(e);
+  const e = scaled(MAKERS[type](s.L)); e.sc *= .9 + Math.random() * .18; e.t = 0; s.ents.push(e);
 }
 function shoot() {
   const s = SS; if (!s || s.ended || s.shots <= 0) return;
@@ -1674,7 +1966,7 @@ function processShot() {
     if (e.kind === 'target') {
       G.targetFound = true; s.gotTargetToday = true; G.species.set(best.info.name, best.info.latin);
       if (!G.bestTarget || best.q > G.bestTarget.q) G.bestTarget = photo;
-      toast('Bekantan terdokumentasi! ' + best.q + '%  +' + best.score, '#FFD98A'); sfxGood();
+      toast(tgtName() + ' terdokumentasi! ' + best.q + '%  +' + best.score, '#FFD98A'); sfxGood();
     } else if (e.kind === 'animal') {
       G.species.set(best.info.name, best.info.latin);
       toast(best.info.name + ' · ' + best.q + '%' + (best.mom ? ' · momen!' : '') + '  +' + best.score, best.mom ? '#FFE7A3' : '#FFFFFF');
@@ -1697,8 +1989,8 @@ function updSession(dt) {
   s.nextSpawn -= dt;
   const animals = s.ents.filter(e => e.kind === 'animal').length;
   if (s.nextSpawn <= 0) { if (animals < 3) spawnAnimal(); s.nextSpawn = rnd(3, 5); }
-  if (s.tgtAt >= 0 && !s.tgtSpawned && s.t >= s.tgtAt) { s.tgtSpawned = true; const bk = scaled(mkBekantan(s.L)); s.ents.push(bk); G.appearedEver = true; s.sawTarget = true; CALLS.bekantan(panOf(clamp(toScreenX(bk.x), 0, W))); }
-  if (s.clueAt >= 0 && !s.clueSpawned && s.t >= s.clueAt) { s.clueSpawned = true; s.ents.push(mkClue(s.spot.clue, s.L)); }
+  if (s.tgtAt >= 0 && !s.tgtSpawned && s.t >= s.tgtAt) { s.tgtSpawned = true; const bk = scaled(TARGETMK[tgtId()](s.L)); s.ents.push(bk); G.appearedEver = true; s.sawTarget = true; CALLS[tgtId()](panOf(clamp(toScreenX(bk.x), 0, W))); }
+  if (s.clueAt >= 0 && !s.clueSpawned && s.t >= s.clueAt) { s.clueSpawned = true; s.ents.push(mkClue(spotClue(s.spot), s.L)); }
   for (const e of s.ents) { e.t += dt; e.upd(dt); if (e.kind === 'animal' || e.kind === 'target') { if (e.callT == null) e.callT = rnd(0.8, 4); e.callT -= dt; if (e.callT <= 0 && e.alpha > 0.5 && !offScreen(e, 20)) { if (CALLS[e.type]) CALLS[e.type](panOf(clamp(toScreenX(e.x), 0, W))); e.callT = rnd(5, 11); } } }
   const fr = frameRect();
   for (const e of s.ents) {
@@ -1940,10 +2232,10 @@ function drawMissions() {
     ctx.strokeStyle = m.open ? (hov ? '#E07A3F' : '#3D5E48') : '#2A3D31'; ctx.lineWidth = 2; ctx.stroke();
     if (m.open) {
       ctx.save(); ctx.beginPath(); rrect(x + 10, y0 + 10, cw - 20, 170, 10); ctx.clip(); ctx.fillStyle = '#3F6E45'; ctx.fillRect(x + 10, y0 + 10, cw - 20, 170);
-      ell(x + cw / 2, y0 + 150, 120, 40, '#4E8A55'); seg(x + 10, y0 + 140, x + cw - 10, y0 + 136, '#4E3A2A', 7);
-      ctx.translate(x + cw / 2 - 6, y0 + 140); ctx.scale(1.55, 1.55); drawBekantan(0, 0, 1, 'sit', Math.sin(G.time * .7) > 0, G.time); ctx.restore();
+      ell(x + cw / 2, y0 + 150, 120, 40, '#4E8A55'); if (m.id !== 'badak') seg(x + 10, y0 + 140, x + cw - 10, y0 + 136, '#4E3A2A', 7); else { ell(x + cw / 2, y0 + 172, 70, 8, '#6E5A40'); ell(x + cw / 2 - 10, y0 + 171, 40, 4, 'rgba(150,170,175,.5)'); }
+      ctx.translate(x + cw / 2 - 6, y0 + 140); if (m.id === 'badak') { ctx.translate(-4, 30); ctx.scale(1.25, 1.25); drawBadak(0, 0, 1, 'stand', G.time, true); } else if (m.id === 'cendrawasih') { ctx.translate(24, -4); ctx.scale(2, 2); drawCendrawasih(0, 0, 1, Math.sin(G.time * .6) > -.2 ? 'display' : 'sit', G.time); } else { ctx.scale(1.55, 1.55); drawBekantan(0, 0, 1, 'sit', Math.sin(G.time * .7) > 0, G.time); } ctx.restore();
       text(m.name, x + 16, y0 + 210, 22, '#FFF4E0', 'left', 800); text(m.latin, x + 16, y0 + 232, 13, '#B9CBBE', 'left', 400);
-      text(MAX_DAYS + ' hari · Misi 1', x + 16, y0 + 262, 13, '#E8A27A', 'left', 600);
+      text(MAX_DAYS + ' hari · Misi ' + (i + 1), x + 16, y0 + 262, 13, '#E8A27A', 'left', 600);
       UI.push({ x, y: y0, w: cw, h: ch, fn: () => newMission(m) }); if (hov) hovering = true;
     } else {
       rrect(x + 10, y0 + 10, cw - 20, 170, 10); ctx.fillStyle = '#16241C'; ctx.fill();
@@ -2041,14 +2333,14 @@ function drawSummary() {
   let y = 436;
   if (G.offerSwitch) {
     rrect(40, 420, W - 80, 62, 12); ctx.fillStyle = '#2A3F31'; ctx.fill();
-    wrapText('Warga: "' + (VILLAGER[G.region] || 'Belum pernah ada yang melihat monyet hidung panjang di sini.') + ' Katanya ia hidup di pulau yang berbagi daratan dengan Malaysia dan Brunei."', 58, 446, W - 120, 20, 14, '#F2E8D5', 400);
+    wrapText('Warga: "' + ((G.mission.villager || {})[G.region] || 'Belum pernah ada yang melihat ' + G.mission.short + ' di sini.') + ' ' + G.mission.hint + '"', 58, 446, W - 120, 20, 14, '#F2E8D5', 400);
     button(W - 420, 492, 210, 38, 'Pindah daerah (1x)', () => { G.switchUsed = true; G.offerSwitch = false; G.day++; G.screen = G.day > G.maxDays ? 'archive' : 'map'; if (G.screen === 'archive') sfxSoft(); }, { primary: true, size: 15 });
     button(W - 200, 492, 160, 38, 'Tetap di sini', () => { G.switchUsed = true; G.offerSwitch = false; nextDay(); }, { size: 15 });
     return;
   }
   const lines = [];
-  if (d.got) lines.push(['Bekantan berhasil didokumentasikan hari ini!', '#FFD98A']);
-  else if (d.saw) lines.push(['Bekantan sempat muncul, tapi lolos dari kamera.', '#FFC2B0']);
+  if (d.got) lines.push([tgtName() + ' berhasil didokumentasikan hari ini!', '#FFD98A']);
+  else if (d.saw) lines.push([tgtName() + ' sempat muncul, tapi lolos dari kamera.', '#FFC2B0']);
   d.clues.forEach(c => lines.push(['Petunjuk: ' + c.text, '#BFF0C2']));
   if (d.reports.length) lines.push(['Laporan terkirim ke desa: ' + d.reports.join(', '), '#FFC2B0']);
   if (!lines.length) lines.push(['Tidak ada petunjuk baru hari ini.', '#B9CBBE']);
@@ -2068,22 +2360,22 @@ function drawArchive() {
   if (G.bestTarget) {
     ctx.save(); ctx.translate(48, 82); ctx.rotate(-0.025); ctx.fillStyle = '#FBF8F1'; ctx.fillRect(0, 0, 384, 320);
     ctx.drawImage(G.bestTarget.img, 12, 12, 360, 244);
-    text('Bekantan · Nasalis larvatus', 14, 282, 15, '#222', 'left', 800);
+    text(tgtName() + ' · ' + SPECIES[tgtId()].latin, 14, 282, 15, '#222', 'left', 800);
     text('Teridentifikasi · kualitas ' + G.bestTarget.q + '% · Hari ' + G.bestTarget.day + ', ' + G.bestTarget.spot, 14, 304, 12, '#666', 'left', 500); ctx.restore();
   } else {
     rrect(48, 82, 384, 320, 10); ctx.fillStyle = '#1C3024'; ctx.fill(); ctx.strokeStyle = '#2F4637'; ctx.lineWidth = 2; ctx.stroke();
-    text('Belum ada foto Bekantan', 240, 240, 18, '#7E9A88', 'center', 700);
+    text('Belum ada foto ' + tgtName(), 240, 240, 18, '#7E9A88', 'center', 700);
   }
   const s1 = G.targetFound, s2 = !!(G.bestTarget && G.bestTarget.q >= 70), s3 = G.reports >= 3 && G.species.size >= 5;
   const x = 480;
   text(s1 ? 'Misi berhasil' : 'Misi belum berhasil', x, 112, 32, s1 ? '#FFE2A3' : '#FFC2B0', 'left', 800);
   star(x + 18, 146, 16, s1); star(x + 56, 146, 16, s2); star(x + 94, 146, 16, s3);
-  const crit = [[s1, 'Foto Bekantan didapat'], [s2, 'Foto Bekantan berkualitas 70% ke atas'], [s3, 'Minimal 3 laporan ancaman dan 5 spesies']];
+  const crit = [[s1, 'Foto ' + tgtName() + ' didapat'], [s2, 'Foto ' + tgtName() + ' berkualitas 70% ke atas'], [s3, 'Minimal 3 laporan ancaman dan 5 spesies']];
   let y = 190; crit.forEach(c => { text(c[0] ? '✓' : '✗', x, y, 15, c[0] ? '#BFF0C2' : '#FFB4A0', 'left', 800); text(c[1], x + 22, y, 15, '#E6EDE7', 'left', 500); y += 24; });
   y += 8; text('Spesies terdokumentasi: ' + G.species.size + '   ·   Laporan: ' + G.reports + '   ·   Skor: ' + G.total, x, y, 14, '#FFE2C7', 'left', 600);
   y = wrapText(Array.from(G.species.keys()).join(', ') || '-', x, y + 22, 430, 18, 13, '#B9CBBE', 400);
   rrect(x, y + 18, 440, 110, 12); ctx.fillStyle = '#20362A'; ctx.fill();
-  wrapText('Bekantan hanya hidup di Pulau Kalimantan dan bergantung pada hutan bakau serta hutan tepi sungai. Statusnya terancam punah (IUCN: Endangered). Setiap foto menjadi data, dan setiap laporan membantu desa menjaga habitatnya.', x + 16, y + 44, 408, 19, 13.5, '#E6EDE7', 400);
+  wrapText(G.mission.fact, x + 16, y + 44, 408, 19, 13.5, '#E6EDE7', 400);
   button(48, 470, 180, 44, 'Ulangi misi', () => newMission(G.mission), { primary: true });
   button(244, 470, 160, 44, 'Menu utama', () => { G.screen = 'menu'; });
 }
