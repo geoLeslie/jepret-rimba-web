@@ -34,21 +34,60 @@ Cari komentar `// =====` di file. Urutannya:
 | Core | canvas 960×540 logis (di-render 2×), `fit()` letterbox, helper `lerp/clamp/rnd` |
 | Input | mouse, klik, kamera |
 | Audio | WebAudio sintetis, tanpa file. `CALLS` = suara tiap spesies |
-| Data | `SPECIES`, `CLUEDEF` (petunjuk), `THREATDEF` (ancaman), `LAYOUTS`, `SPOTS`, `MISSIONS` |
+| Data | `SPECIES`, `CLUEDEF` (petunjuk), `THREATDEF` (ancaman), `LAYOUTS`, `SPOTS` (Kalimantan), `ISLANDSPOTS` + `VILLAGER` (pulau lain), `MISSIONS` |
 | Pixel map | grid 320×180 RLE hasil `tools/mapgen`, `regionAt()`, `mapImage()` |
 | Game state | objek `G` (hari, wilayah, laporan, bintang) |
+| Safari car (auto drive) | `DRIVE_SPEED`, `SHOTS`, `MAX_DAYS`; latar panorama per titik (`wideLayout`), posisi dunia (`drive()`, `branchYW`, `perchesIn`, `treesIn`, `placeIn`) |
 | Entities | `ent()`, perilaku Bekantan dan hewan lain (`upd/draw/flee/moment/c`) |
 | Art helpers | `ell`, `facetEll` (gaya low-poly), `leafBlob`, `ridge` |
 | Creatures | gambar prosedural tiap hewan |
-| Scene / Tree species | `SPP` palet spesies, `buildTree`, mahkota pohon yang bergoyang |
-| Layout art | layer `far/main/fg/vig` dirender sekali per lokasi, parallax dari mouse |
+| Scene / Tree species | `SPP` palet spesies (termasuk rengas, tancang, waru), `AREATREES` (5 pohon per area), `buildTree`, mahkota pohon yang bergoyang |
+| Layout art | layer `far/main/fg/vig` dirender sekali per lokasi (`getLayers`, `buildForest`); saat mobil berjalan, satu latar lebar utuh. Pohon per pulau: `ISLANDLOOK` |
 | Particles / Markers | daun, serangga, penanda petunjuk dan ancaman |
+| Safari car art | tampilan dari dalam mobil (`drawSafariCar`), warna `CAR_SKINS` / `CAR_STYLE` |
 | Session | `startSession`, `endSession`, `nextDay`, `processShot` |
-| Region pixel map | `regionMapImage()` peta wilayah |
-| Screens | menu, misi, peta, wilayah, ringkasan, arsip, cara main |
+| Region pixel map | `regionMapImage()` peta titik tiap pulau, bentuk pulau `ISLANDMAP`, label `MAPLABELS` |
+| Screens | `drawMenu`, `drawHowto`, `drawMissions`, `drawMap`, `drawRegion`, `drawSummary`, `drawArchive` |
 | Loop | `requestAnimationFrame` |
 
 Hook debug di console browser: `window.__G` (state) dan `window.__SS` (sesi aktif).
+
+## Di mana mengubah apa
+
+Semua desain digambar oleh kode di `index.html` (tidak ada file gambar). Cari nama fungsi atau data di bawah dengan Ctrl+F; nomor baris berubah setiap kali file diedit, jadi pakai nama.
+
+### Layar menu dan peta
+
+| Yang terlihat | Ubah di |
+|---|---|
+| Menu awal (judul, Mulai, Cara Main) | `drawMenu` |
+| Popup Cara Main | `drawHowto` (teks aturan ada di sini) |
+| Pilih misi (kartu Bekantan, kartu terkunci) | `drawMissions`; data misi di `MISSIONS` |
+| Layar peta Indonesia | `drawMap`; warna dan piksel peta di `mapImage`, nama pulau di `REGIONS` |
+| Layar peta titik tiap pulau (pin, panel info) | `drawRegion`; gambar peta di `regionMapImage`, bentuk pantai/sungai/desa di `ISLANDMAP`, label Laut/Sungai/Desa di `MAPLABELS`, ikon pin di `SPOTICON` |
+| Ringkasan hari | `drawSummary`; pesan warga pulau salah di `VILLAGER` |
+| Arsip desa (akhir misi) | `drawArchive` |
+| Tombol di semua layar | `button` |
+| Bingkai foto polaroid | `polaroid` |
+| Huruf | `FONT`, `font()`, `text()` |
+
+### Sesi foto
+
+| Yang terlihat | Ubah di |
+|---|---|
+| HUD sesi (hari, timer, kotak jepretan, bingkai bidik, label MOMEN) | `drawSession`, label objek di `drawFrameLabel` |
+| Tampilan mobil safari (atap, roll bar, sandaran tangan) | `drawSafariCar`; warna di `CAR_SKINS`, pilihan warna `CAR_STYLE` |
+| Kecepatan mobil, jumlah jepretan, jumlah hari | `DRIVE_SPEED`, `SHOTS`, `MAX_DAYS` |
+| Langit, bukit, tanah, air, rumput tiap titik | `getLayers` (per jenis: river, mangrove, pedada, estuary); awan/perahu tambahan di `extraSky`, tanaman depan di `extraFg` |
+| Latar panorama selama perjalanan | `wideLayout` (pohon utama, pohon latar, lebar) |
+| Bentuk dan warna pohon | `buildTree`, palet di `SPP`; 5 pohon per area di `AREATREES`; campuran pohon per pulau di `ISLANDLOOK` |
+| Gambar satwa | `drawBekantan`, `drawKuntul`, `drawPekaka`, dan fungsi `draw…` lain di bagian Creatures; nama dan poin di `SPECIES` |
+| Gambar petunjuk dan ancaman, penanda ? dan ! | `drawClue`, `drawThreat`, `drawMarker`; data di `CLUEDEF`, `THREATDEF` |
+| Titik foto Kalimantan / pulau lain | `SPOTS` / `ISLANDSPOTS` (nama, waktu, satwa, ancaman, event) |
+
+### Pembagian kerja agar tidak konflik
+
+Satu file dipakai bersama, jadi bagi berdasarkan bagian: satu orang mengubah layar menu dan peta (bagian **Screens**, `mapImage`, `regionMapImage`), yang lain mengubah sesi foto (mobil, latar, pohon, satwa). Jangan auto-format seluruh file atau memindahkan blok kode, karena itu mengubah semua baris dan pasti konflik saat merge.
 
 ## Angka yang perlu di-tuning setelah playtest
 
