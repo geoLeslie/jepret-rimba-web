@@ -1,4 +1,4 @@
-> **Versi web (HTML5 Canvas).** Ini build yang sudah bisa dimainkan dan siap upload ke itch.io. Scaffold Godot ada di folder induk repo. Panduan lanjut: [DEVELOPMENT.md](DEVELOPMENT.md).
+> **Versi web (HTML5 Canvas).** Ini build yang sudah bisa dimainkan dan siap upload ke itch.io. Panduan lanjut: [DEVELOPMENT.md](DEVELOPMENT.md).
 
 # Jepret Rimba
 
@@ -10,9 +10,9 @@ Game memotret satwa endemik Indonesia untuk Game Jam IT RUSH 2026.
 
 1. Pilih misi (Bekantan).
 2. Pilih pulau tempat satwa itu hidup di peta Indonesia.
-3. Selama 5 hari, pilih satu titik per hari lalu memotret selama 40 detik (8 jepretan).
+3. Selama 3 hari, pilih satu titik per hari lalu memotret selama 40 detik (5 jepretan) dari mobil safari yang berjalan sendiri. Satwa yang tidak segera difoto akan terlewat.
 4. Foto satwa untuk poin, foto petunjuk (?) untuk menaikkan peluang target muncul, dan foto ancaman (!) untuk dikirim sebagai laporan ke desa.
-5. Misi berhasil jika satwa target terfoto dalam 5 hari.
+5. Misi berhasil jika satwa target terfoto dalam 3 hari.
 
 Kontrol: gerakkan mouse atau jari untuk membidik, klik, ketuk, atau Spasi untuk menjepret.
 

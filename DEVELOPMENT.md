@@ -5,7 +5,9 @@ Dokumen ini untuk siapa pun yang melanjutkan game ini.
 ## Ringkasan desain
 
 - **Satu mekanik**: bidik dan jepret. Layar peta dan layar wilayah hanya layar keputusan, bukan mekanik tambahan.
-- **Alur**: pilih misi → pilih wilayah di peta Indonesia → kampanye 5 hari. Tiap hari 40 detik sesi, 8 jepretan.
+- **Alur**: pilih misi → pilih wilayah di peta Indonesia → kampanye 3 hari. Tiap hari 40 detik sesi, 5 jepretan (`SHOTS`, `MAX_DAYS` di index.html).
+- **Mobil safari**: mobil berjalan sendiri ke kiri (`DRIVE_SPEED`, 0 = mati). Pemain tidak menyetir; satu-satunya aksi tetap bidik dan jepret. Warna mobil: `CAR_STYLE` (1 Klasik, 2 Ranger, 3 Desa).
+- **Latar panorama**: tiap titik dibangun sebagai satu latar lebar utuh untuk seluruh perjalanan (`wideLayout`), dengan 5 pohon khas per area (`AREATREES`). Pulau lain punya peta titik, titik, dan pohon sendiri (`ISLANDSPOTS`, `ISLANDMAP`, `ISLANDLOOK`).
 - **Misi yang sudah jadi**: Bekantan (Kalimantan). Tarsius, Cendrawasih, dan Penyu hijau baru placeholder di `MISSIONS` (`open:false`).
 - **Tema jam**: "Only one mechanics in a tropical". Tema besar: penguatan masyarakat dan keberlanjutan pesisir/hutan tropis.
 
@@ -52,7 +54,7 @@ Hook debug di console browser: `window.__G` (state) dan `window.__SS` (sesi akti
 
 Semua ini baru usulan dan belum diuji pemain sungguhan.
 
-- **Peluang Bekantan muncul**: `SPOTS[i].base` + bonus petunjuk (`CLUEDEF[*].bonus`) + bonus laporan. Wilayah salah = 0. Hari ≥4 dijamin muncul bila wilayah benar. Logikanya ada di `newMission` / `startSession` / `nextDay`.
+- **Peluang Bekantan muncul**: `SPOTS[i].base` + bonus petunjuk (`CLUEDEF[*].bonus`) + bonus laporan. Wilayah salah = 0. Di hari terakhir (hari 3) dijamin muncul bila wilayah benar. Logikanya ada di `newMission` / `startSession` / `nextDay`.
 - **Hewan kabur**: bidikan lebih dari 3 detik pada hewan pemalu (target utama 5 detik). Cari `lim` di bagian Session. Tanda "!" muncul di 55% batas.
 - **Skor**: `processShot()` = poin spesies × (0.5 + kualitas), ×1.5 untuk momen khusus. Kualitas dari ketepatan tengah, momen, dan kejernihan (kabut bakau).
 - **Bintang**: foto target dengan kualitas ≥70%, minimal 3 laporan ancaman, minimal 5 spesies.

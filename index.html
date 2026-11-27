@@ -299,7 +299,7 @@ function regionAt(px, py) {
 // ===== Game state =====
 const G = { screen: 'menu', howto: false, time: 0 };
 function newMission(m) {
-  Object.assign(G, { mission: m, region: null, regionCorrect: false, day: 1, maxDays: 5, switchUsed: false, offerSwitch: false,
+  Object.assign(G, { mission: m, region: null, regionCorrect: false, day: 1, maxDays: MAX_DAYS, switchUsed: false, offerSwitch: false,
     bonus: {}, reported: {}, photos: [], species: new Map(), reports: 0, reportList: [], targetFound: false, bestTarget: null,
     appearedEver: false, total: 0, lastDay: null, visitedRegion: false, visitLog: [], selSpot: null });
   G.screen = 'map';
@@ -313,7 +313,9 @@ function regionName() { const r = REGIONS.find(x => x.id === G.region); return r
 // World x -> screen x = world x + drive(). The layouts are one screen wide, so the
 // world continues as a mirrored copy (period 2W), which keeps the scenery seamless.
 // Set DRIVE_SPEED to 0 to turn the car off (the game then plays like before).
-const DRIVE_SPEED = 30; // px per second; a 40 s session drives about 1200 px
+const DRIVE_SPEED = 50; // px per second; a 40 s session drives about 2000 px
+// Mission tuning (GDD: 5 photos per session, 3 days; tune shots between 5 and 8 after playtest)
+const SHOTS = 5, MAX_DAYS = 3;
 function drive() { return SS ? SS.drive || 0 : 0; }
 function viewL() { return -drive(); }
 function viewR() { return W - drive(); }
@@ -1507,10 +1509,10 @@ function startSession(spot) {
   const L = layoutFor(spot);
   const ok = G.regionCorrect;
   let p = ok ? Math.min(0.9, spot.base + (G.bonus[spot.id] || 0) + (G.reported[spot.id] ? 0.05 : 0)) : 0;
-  const guarantee = ok && !G.appearedEver && G.day >= 4;
+  const guarantee = ok && !G.appearedEver && G.day >= G.maxDays; // right island: it always shows on the last day
   if (guarantee) p = 1;
   const tgt = Math.random() < p;
-  SS = { spot, L, WL: null, X0: 0, t: 0, dur: 40, shots: 8, ents: [], nextSpawn: 2.5, tgtAt: tgt ? rnd(guarantee ? 5 : 7, guarantee ? 14 : 22) : -1, tgtSpawned: false,
+  SS = { spot, L, WL: null, X0: 0, t: 0, dur: 40, shots: SHOTS, ents: [], nextSpawn: 2.5, tgtAt: tgt ? rnd(guarantee ? 5 : 7, guarantee ? 14 : 22) : -1, tgtSpawned: false,
     clueAt: (ok && spot.clue) ? rnd(5, 22) : -1, clueSpawned: false, evSignaled: false, evOn: false, ev: 0, flash: 0, last: null, lastT: 9,
     parts: [], toasts: [], dayPhotos: [], dayClues: [], dayReports: [], sawTarget: false, gotTargetToday: false, ended: false, lastShotT: -9, pending: false, drive: 0 };
   if (DRIVE_SPEED) { SS.WL = wideLayout(L, Math.ceil(DRIVE_SPEED * SS.dur)); SS.X0 = W - SS.WL.width; getLayers(SS.WL); }
@@ -1632,7 +1634,7 @@ function drawSession() {
   text('Hari ' + G.day + '/' + G.maxDays + ' · ' + s.spot.name + ' · ' + s.spot.time, 26, 38, 16, '#FFFFFF', 'left', 600);
   rrect(W - 262, 12, 250, 40, 10); ctx.fillStyle = 'rgba(12,24,18,.62)'; ctx.fill();
   const left = Math.max(0, Math.ceil(s.dur - s.t)); text(String(left).padStart(2, '0') + ' dtk', W - 246, 38, 16, left <= 10 ? '#FFD34D' : '#FFFFFF', 'left', 700);
-  for (let i = 0; i < 8; i++) { rrect(W - 168 + i * 18, 23, 12, 18, 2); ctx.fillStyle = i < s.shots ? '#F2E8D5' : 'rgba(255,255,255,.18)'; ctx.fill(); }
+  for (let i = 0; i < SHOTS; i++) { rrect(W - 168 + i * 18, 23, 12, 18, 2); ctx.fillStyle = i < s.shots ? '#F2E8D5' : 'rgba(255,255,255,.18)'; ctx.fill(); }
   if (s.evOn) { const bw = 300; rrect(W / 2 - bw / 2, 62, bw, 30, 15); ctx.fillStyle = 'rgba(224,122,63,.92)'; ctx.fill(); text(s.spot.event.name.toUpperCase() + ' · nilai foto ×1.5', W / 2, 82, 14, '#FFFFFF', 'center', 700); }
   if (s.last && s.lastT < 2.4) {
     const a = clamp(2.4 - s.lastT, 0, 1); ctx.save(); ctx.globalAlpha = a; ctx.translate(26, H - 150); ctx.rotate(-0.05);
@@ -1798,9 +1800,9 @@ function drawHowto() {
     'Gerakkan mouse atau jari untuk membidik. Klik, ketuk, atau tekan Spasi untuk menjepret.',
     'Bingkai menyala kuning saat satwa sedang beraksi. Itulah momen terbaik.',
     'Satwa pemalu kabur kalau dibidik terlalu lama.',
-    'Satu sesi 40 detik dengan 8 jepretan. Penanda kuning (?) adalah petunjuk, penanda merah (!) adalah ancaman yang bisa dilaporkan.',
+    'Satu sesi 40 detik dengan ' + SHOTS + ' jepretan. Penanda kuning (?) adalah petunjuk, penanda merah (!) adalah ancaman yang bisa dilaporkan.',
     'Petunjuk menaikkan peluang satwa target muncul di titik lain. Foto ancaman dikirim sebagai laporan ke desa.',
-    'Misi berhasil jika satwa target terfoto dalam 5 hari.'
+    'Misi berhasil jika satwa target terfoto dalam ' + MAX_DAYS + ' hari.'
   ];
   let y = 150; for (const l of lines) { ell(206, y - 6, 4, 4, '#E07A3F'); y = wrapText(l, 222, y, 530, 22, 16, '#2D3A31', 400) + 34; }
   button(610, 418, 150, 44, 'Mengerti', () => { G.howto = false; }, { primary: true });
@@ -1819,7 +1821,7 @@ function drawMissions() {
       ell(x + cw / 2, y0 + 150, 120, 40, '#4E8A55'); seg(x + 10, y0 + 140, x + cw - 10, y0 + 136, '#4E3A2A', 7);
       ctx.translate(x + cw / 2 - 6, y0 + 140); ctx.scale(1.55, 1.55); drawBekantan(0, 0, 1, 'sit', Math.sin(G.time * .7) > 0, G.time); ctx.restore();
       text(m.name, x + 16, y0 + 210, 22, '#FFF4E0', 'left', 800); text(m.latin, x + 16, y0 + 232, 13, '#B9CBBE', 'left', 400);
-      text('5 hari · Misi 1', x + 16, y0 + 262, 13, '#E8A27A', 'left', 600);
+      text(MAX_DAYS + ' hari · Misi 1', x + 16, y0 + 262, 13, '#E8A27A', 'left', 600);
       UI.push({ x, y: y0, w: cw, h: ch, fn: () => newMission(m) }); if (hov) hovering = true;
     } else {
       rrect(x + 10, y0 + 10, cw - 20, 170, 10); ctx.fillStyle = '#16241C'; ctx.fill();
