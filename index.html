@@ -119,6 +119,7 @@ const CALLS = {
   julang: p => { tone(300, .12, 'sawtooth', .028, 0, -60, p); tone(280, .12, 'sawtooth', .028, .18, -60, p); tone(260, .12, 'sawtooth', .028, .36, -60, p); },
   elang: p => { tone(1900, .5, 'sine', .022, 0, -700, p); },
   tupai: p => { for (let i = 0; i < 5; i++) tone(2600 + Math.random() * 500, .03, 'square', .012, i * .06, 0, p); },
+  penyu: p => { tone(180, .4, 'sine', .02, 0, -60, p); },
   kakatua: p => { tone(1400, .28, 'sawtooth', .03, 0, -500, p); tone(1300, .24, 'sawtooth', .025, .3, -400, p); }
 };
 function sfxShutter() {
@@ -165,7 +166,8 @@ const SPECIES = {
   julang: { name: 'Julang Papua', latin: 'Rhyticeros plicatus', pts: 40, shy: true },
   elang: { name: 'Elang bondol', latin: 'Haliastur indus', pts: 30, shy: false },
   tupai: { name: 'Bajing kelapa', latin: 'Callosciurus notatus', pts: 15, shy: true },
-  kakatua: { name: 'Kakatua jambul-kuning', latin: 'Cacatua galerita', pts: 35, shy: true }
+  kakatua: { name: 'Kakatua jambul-kuning', latin: 'Cacatua galerita', pts: 35, shy: true },
+  penyu: { name: 'Penyu hijau', latin: 'Chelonia mydas', pts: 35, shy: true }
 };
 const CLUEDEF = {
   ranting: { name: 'Ranting patah', pts: 10, to: 'pedada', bonus: 0.35, text: 'Ranting patah di tepi sungai. Bekantan mungkin bergerak ke arah Pohon Pedada.', pos: L => ({ x: L.canopy[0].x + 62, y: L.canopy[0].y + 26 }) },
@@ -225,7 +227,7 @@ const SPOTS = [
   { id: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 150, y: 246 }, base: 0.35, fauna: ['pekakak', 'biawak', 'kera', 'kuntul', 'rangkong', 'tupai', 'elang'], clue: 'ranting', threat: 'sampah', event: { name: 'Golden hour', sign: 'Cahaya mulai keemasan...' }, desc: 'Pohon besar di tepi sungai. Satwa ramai menjelang sore.' },
   { id: 'bakau', name: 'Hutan Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 384, y: 392 }, base: 0.2, fauna: ['kuntul', 'kepiting', 'tembakul', 'pekakak', 'elang'], clue: 'jejak', threat: 'jerat', event: { name: 'Kabut tersibak', sign: 'Kabut mulai menipis...' }, desc: 'Akar bakau dan lumpur, berkabut di pagi hari.' },
   { id: 'pedada', name: 'Pohon Pedada', time: 'Pagi', layout: 'pedada', pin: { x: 430, y: 186 }, base: 0.25, fauna: ['kera', 'pekakak', 'kuntul', 'tembakul', 'tupai', 'rangkong'], clue: 'daun', threat: 'tunggul', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Pohon pedada berdaun lebat di tepi air.' },
-  { id: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 596, y: 446 }, base: 0.08, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'elang'], clue: null, threat: 'lahan', event: { name: 'Air pasang', sign: 'Air laut mulai pasang...' }, desc: 'Dataran lumpur luas tempat sungai bertemu laut.' }
+  { id: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 596, y: 446 }, base: 0.08, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'elang', 'penyu'], clue: null, threat: 'lahan', event: { name: 'Air pasang', sign: 'Air laut mulai pasang...' }, desc: 'Dataran lumpur luas tempat sungai bertemu laut.' }
 ];
 // Spots per island. Kalimantan (the Bekantan's home) uses SPOTS above. Every other island
 // reuses the same four scene layouts and existing animals, but has its own spots, pins,
@@ -243,30 +245,30 @@ const ISLANDSPOTS = {
     { id: 'sum_gambut', icon: 'sungai', name: 'Rawa Gambut', time: 'Sore', layout: 'river', pin: { x: 186, y: 168 }, base: 0, fauna: ['pekakak', 'biawak', 'kera', 'kuntul', 'rangkong', 'tupai'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai hitam berair gambut di tengah hutan rawa.' },
     { id: 'sum_hutan', icon: 'pedada', name: 'Kubangan Hutan', time: 'Pagi', layout: 'pedada', pin: { x: 280, y: 330 }, base: 0, fauna: ['rangkong', 'tupai', 'kera', 'pekakak', 'elang'], clue: null, threat: 'jerat', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Hutan dataran rendah dengan kubangan lumpur di bawah pohon besar.' },
     { id: 'sum_bakau', icon: 'bakau', name: 'Bakau Pantai Timur', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 150 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'pekakak', 'elang'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Sabuk bakau panjang di pesisir timur yang landai.' },
-    { id: 'sum_muara', icon: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 560, y: 336 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Sungai gambut bertemu laut, airnya cokelat kehitaman.' }
+    { id: 'sum_muara', icon: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 560, y: 336 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'penyu'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Sungai gambut bertemu laut, airnya cokelat kehitaman.' }
   ],
   jawa: [
     { id: 'jaw_bakau', icon: 'bakau', name: 'Bakau Pantura', time: 'Pagi', layout: 'mangrove', pin: { x: 216, y: 186 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'biawak'], clue: null, threat: 'sampah', event: EV.kabut, desc: 'Sisa hutan bakau di pantai utara, diapit tambak dan sawah.' },
-    { id: 'jaw_muara', icon: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 438, y: 174 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Muara sungai yang ramai perahu nelayan.' }
+    { id: 'jaw_muara', icon: 'muara', name: 'Muara', time: 'Siang', layout: 'estuary', pin: { x: 438, y: 174 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'penyu'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Muara sungai yang ramai perahu nelayan.' }
   ],
   sulawesi: [
     { id: 'sul_sungai', icon: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 186, y: 204 }, base: 0, fauna: ['kuntul', 'tembakul', 'kepiting', 'daralaut'], clue: null, threat: 'sampah', event: EV.golden, desc: 'Sungai jernih turun dari perbukitan menuju teluk.' },
     { id: 'sul_teluk', icon: 'bakau', name: 'Teluk Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 390, y: 336 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Bakau di sudut teluk yang tenang.' },
-    { id: 'sul_pantai', icon: 'muara', name: 'Pantai', time: 'Siang', layout: 'estuary', pin: { x: 576, y: 426 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Pantai berlumpur di mulut teluk.' }
+    { id: 'sul_pantai', icon: 'muara', name: 'Pantai', time: 'Siang', layout: 'estuary', pin: { x: 576, y: 426 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'penyu'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Pantai berlumpur di mulut teluk.' }
   ],
   nusa: [
     { id: 'nus_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 216, y: 192 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Bakau kecil di pantai utara pulau yang kering.' },
-    { id: 'nus_pantai', icon: 'muara', name: 'Pantai Selatan', time: 'Siang', layout: 'estuary', pin: { x: 450, y: 372 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Pantai terbuka menghadap laut lepas, dekat sabana.' }
+    { id: 'nus_pantai', icon: 'muara', name: 'Pantai Selatan', time: 'Siang', layout: 'estuary', pin: { x: 450, y: 372 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'penyu'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Pantai terbuka menghadap laut lepas, dekat sabana.' }
   ],
   maluku: [
-    { id: 'mal_pantai', icon: 'muara', name: 'Pantai', time: 'Siang', layout: 'estuary', pin: { x: 396, y: 252 }, base: 0, fauna: ['daralaut', 'kuntul', 'tembakul', 'kepiting'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Pantai pulau kecil berair jernih.' },
+    { id: 'mal_pantai', icon: 'muara', name: 'Pantai', time: 'Siang', layout: 'estuary', pin: { x: 396, y: 252 }, base: 0, fauna: ['daralaut', 'kuntul', 'tembakul', 'kepiting', 'penyu'], clue: null, threat: 'sampah', event: EV.pasang, desc: 'Pantai pulau kecil berair jernih.' },
     { id: 'mal_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 156, y: 366 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'daralaut'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Bakau di teluk kecil antarpulau.' }
   ],
   papua: [
     { id: 'pap_sungai', icon: 'sungai', name: 'Tepi Sungai', time: 'Sore', layout: 'river', pin: { x: 174, y: 132 }, base: 0, fauna: ['kakatua', 'julang', 'kuntul', 'tembakul', 'elang'], clue: null, threat: 'tunggul', event: EV.golden, desc: 'Sungai besar berkelok di dataran rendah.' },
     { id: 'pap_hutan', icon: 'pedada', name: 'Pohon Tari', time: 'Pagi', layout: 'pedada', pin: { x: 150, y: 330 }, base: 0, fauna: ['kakatua', 'julang', 'pekakak', 'elang'], clue: null, threat: 'tunggul', event: { name: 'Sinar pagi', sign: 'Sinar matahari mulai menembus daun...' }, desc: 'Pohon tinggi di hutan dataran rendah, tempat burung jantan menari.' },
     { id: 'pap_bakau', icon: 'bakau', name: 'Bakau', time: 'Pagi', layout: 'mangrove', pin: { x: 570, y: 276 }, base: 0, fauna: ['kuntul', 'kepiting', 'tembakul', 'kakatua'], clue: null, threat: 'jerat', event: EV.kabut, desc: 'Hutan bakau yang sangat luas di delta sungai.' },
-    { id: 'pap_muara', icon: 'muara', name: 'Muara Sungai', time: 'Siang', layout: 'estuary', pin: { x: 552, y: 444 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Delta lumpur tempat sungai besar bertemu laut.' }
+    { id: 'pap_muara', icon: 'muara', name: 'Muara Sungai', time: 'Siang', layout: 'estuary', pin: { x: 552, y: 444 }, base: 0, fauna: ['daralaut', 'kuntul', 'kepiting', 'tembakul', 'penyu'], clue: null, threat: 'lahan', event: EV.pasang, desc: 'Delta lumpur tempat sungai besar bertemu laut.' }
   ]
 };
 function regionSpots() { return ISLANDSPOTS[G.region] || SPOTS; }
@@ -433,7 +435,7 @@ function tiledMirror(off, w, fn) {
 
 // ===== Entities =====
 function ent(o) { return Object.assign({ t: 0, alpha: 0, dead: false, aimT: 0, fleeing: false, kind: 'animal', f: 1, sc: 1 }, o); }
-const SCALE = { cendrawasih: 1.45, rangkong: 1.1, julang: 1.1, badak: 1.3 };
+const SCALE = { penyu: 1.4, cendrawasih: 1.45, rangkong: 1.1, julang: 1.1, badak: 1.3 };
 function scaled(e) { e.sc = SCALE[e.type] || 1; const c0 = e.c; e.c = () => { const c = c0(); return { x: e.x + (c.x - e.x) * e.sc, y: e.y + (c.y - e.y) * e.sc }; }; return e; }
 function fadeIn(e, d) { if (e.t < d) e.alpha = e.t / d; else e.alpha = Math.max(e.alpha, 1); }
 
@@ -599,7 +601,7 @@ function mkDaralaut(L) {
   };
   return e;
 }
-const MAKERS = { pekakak: mkPekaka, kuntul: mkKuntul, kepiting: mkKepiting, tembakul: mkTembakul, biawak: mkBiawak, kera: mkKera, daralaut: mkDaralaut, rangkong: L => mkRangkong(L, false), julang: L => mkRangkong(L, true), elang: mkElang, tupai: mkTupai, kakatua: mkKakatua };
+const MAKERS = { pekakak: mkPekaka, kuntul: mkKuntul, kepiting: mkKepiting, tembakul: mkTembakul, biawak: mkBiawak, kera: mkKera, daralaut: mkDaralaut, rangkong: L => mkRangkong(L, false), julang: L => mkRangkong(L, true), elang: mkElang, tupai: mkTupai, kakatua: mkKakatua, penyu: mkPenyu };
 function mkClue(id, L) {
   const p = placeIn(CLUEDEF[id].pos, viewL() + W * 0.35, L); const px = p.x;
   const e = ent({ type: id, kind: 'clue', x: px, y: p.y, life: 13 });
@@ -928,6 +930,169 @@ function mkKakatua(L) {
   return e;
 }
 const TARGETMK = { bekantan: L => mkBekantan(L), badak: L => mkBadak(L), cendrawasih: L => mkCendrawasih(L) };
+
+// ===== Penyu hijau (Chelonia mydas): crawls on the sand toward the water, lifts its head to breathe =====
+function drawPenyu(x, y, f, t, crawl, head) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+  const s = crawl ? Math.sin(t * 4) : 0;
+  shadow(0, 1, 26);
+  // flippers
+  ctx.fillStyle = '#5E7A5A';
+  ctx.save(); ctx.translate(12, -6); ctx.rotate(.5 + s * .35); ctx.beginPath(); ctx.ellipse(10, 0, 13, 4, 0, 0, PI2); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(-14, -4); ctx.rotate(-.3 - s * .3); ctx.beginPath(); ctx.ellipse(-6, 2, 8, 3.4, 0, 0, PI2); ctx.fill(); ctx.restore();
+  // head
+  const hy = head ? -14 : -8;
+  ellG(26, hy, 7.5, 5.6, head ? -.35 : 0, '#6E8A62'); ellG(29, hy - 1, 3.6, 2.4, 0, '#8AA27A');
+  ellG(28, hy - 2, 1.3, 1.3, 0, '#140C06'); curve(30, hy + 2, 32, hy + 2.6, 33, hy + 1.6, .8, '#3A4A32');
+  // shell with scutes
+  const sh = new Path2D(); sh.ellipse(0, -10, 24, 12, 0, Math.PI, PI2); sh.lineTo(24, -8); sh.quadraticCurveTo(0, -2, -24, -8); sh.closePath();
+  ctx.fillStyle = lg(0, -22, 0, -4, ['#8E7A4A', '#6E5E38', '#4E4428']); ctx.fill(sh);
+  ctx.save(); ctx.clip(sh); ctx.strokeStyle = 'rgba(40,30,16,.6)'; ctx.lineWidth = 1;
+  for (const [cx, cy, r] of [[0, -14, 6], [-12, -12, 5.5], [12, -12, 5.5], [-6, -19, 4.6], [6, -19, 4.6]]) { ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k / 6 * PI2 + .5; ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * .8); } ctx.closePath(); ctx.stroke(); ctx.fillStyle = 'rgba(255,230,170,.12)'; ctx.fill(); }
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,240,200,.3)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(0, -10, 22, 10.6, 0, Math.PI * 1.1, Math.PI * 1.6); ctx.stroke();
+  ctx.restore();
+}
+function mkPenyu(L) {
+  const f = pick([1, -1]), y = L.kind === 'estuary' ? rnd(430, 470) : L.groundY + 8;
+  const e = ent({ type: 'penyu', x: rnd(viewL() + 120, viewL() + W * .6), y, f, life: rnd(11, 14), crawl: true, hide: false });
+  e.upd = dt => {
+    if (e.hide) { e.alpha -= dt * 1.5; if (e.alpha <= 0) e.dead = true; return; }
+    fadeIn(e, .6); const cyc = e.t % 4.2; e.crawl = cyc < 2.6; e.head = cyc > 2.9 && cyc < 3.9;
+    if (e.crawl) e.x += e.f * 9 * dt; if (e.t > e.life) e.hide = true;
+  };
+  e.flee = () => { e.hide = true; };
+  e.moment = () => e.head;
+  e.c = () => ({ x: e.x + e.f * 6, y: e.y - 12 });
+  e.draw = () => drawPenyu(e.x, e.y, e.f, e.t, e.crawl, e.head);
+  return e;
+}
+// ===== Variants: animals affected by people (non-graphic), and rare albinos =====
+const IMPACT = {
+  kuntul: { chance: .15, label: 'terjerat tali pancing', draw: e => { const x = e.x, y = e.y; ctx.strokeStyle = 'rgba(170,215,235,.95)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.ellipse(x + (i % 2 ? 2 : -2), y - 6 - i * 2.4, 6 - i * .4, 2.2, .2 * (i % 2 ? 1 : -1), 0, PI2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(x + 4 * e.f, y - 4); ctx.quadraticCurveTo(x + 18 * e.f, y + 2, x + 26 * e.f + Math.sin(e.t * 2) * 3, y - 2); ctx.stroke(); ellG(x + 26 * e.f, y - 2, 1.6, 1.6, 0, '#E8584A'); } },
+  kera: { chance: .14, label: 'terlilit tali rafia', draw: e => { const c = e.c(), x = c.x, y = c.y + 6; ctx.strokeStyle = '#D8402E'; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.ellipse(x + 2 * e.f, y - 2, 7, 3, 0, 0, PI2); ctx.stroke(); ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x - 4 * e.f, y); ctx.quadraticCurveTo(x - 8 * e.f, y + 10, x - 6 * e.f + Math.sin(e.t * 3) * 3, y + 20); ctx.stroke(); } },
+  penyu: { chance: .45, label: 'terjerat sampah plastik', draw: e => { const x = e.x, y = e.y; ctx.save(); ctx.translate(x, y); ctx.scale(e.f, 1);
+    ctx.strokeStyle = 'rgba(235,240,245,.95)'; ctx.lineWidth = 2; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.ellipse(18 + i * 4.5, -9 - i * 1.4, 3.4, 4.6, .3, 0, PI2); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(80,150,220,.85)'; ctx.beginPath(); ctx.moveTo(-10, -18); ctx.quadraticCurveTo(-2, -24, 6, -20); ctx.quadraticCurveTo(0, -15, -8, -14); ctx.closePath(); ctx.fill(); ctx.restore(); } }
+};
+const ALBINO = { kera: 1, biawak: 1, tupai: 1, kepiting: 1, tembakul: 1, rangkong: 1, pekakak: 1 };
+function applyVariant(e) {
+  const im = IMPACT[e.type];
+  if (im && Math.random() < im.chance) { e.impact = im.label; const d0 = e.draw; e.draw = () => { d0(); im.draw(e); }; }
+  else if (ALBINO[e.type] && Math.random() < .04) {
+    e.albino = true; const d0 = e.draw;
+    e.draw = () => { ctx.save(); try { ctx.filter = 'grayscale(1) brightness(1.75) sepia(.18) hue-rotate(-25deg)'; } catch (er) {} d0(); ctx.restore(); if (e.alpha > .5 && Math.sin(e.t * 5) > .7) ellG(e.c().x + 10, e.c().y - 14, 2.2, 2.2, 0, 'rgba(255,255,255,.9)'); };
+  }
+  return e;
+}
+// ===== Ensiklopedia (saved in the browser) =====
+const DEX_KEY = 'jepretRimba.dex.v1';
+let DEX = (() => { try { return JSON.parse(localStorage.getItem(DEX_KEY)) || {}; } catch (er) { return {}; } })();
+const DEXIMG = {};
+function dexSave() { try { localStorage.setItem(DEX_KEY, JSON.stringify(DEX)); } catch (er) {} }
+function dexRecord(type, photo, pc, variant) {
+  const d = DEX[type] || (DEX[type] = { n: 0, q: 0, v: {} }); d.n++;
+  if (variant) d.v[variant] = true;
+  if (photo.q > d.q || !d.img) { d.q = Math.max(d.q, photo.q); try { const c = document.createElement('canvas'); c.width = 160; c.height = 108; c.getContext('2d').drawImage(pc, 0, 0, 160, 108); d.img = c.toDataURL('image/jpeg', .72); delete DEXIMG[type]; } catch (er) {} }
+  const isNew = d.n === 1; dexSave(); return isNew;
+}
+function dexImg(type) { const d = DEX[type]; if (!d || !d.img) return null; if (!DEXIMG[type]) { const im = new Image(); im.src = d.img; DEXIMG[type] = im; } return DEXIMG[type].complete ? DEXIMG[type] : null; }
+const DEXORDER = ['bekantan', 'badak', 'cendrawasih', 'penyu', 'rangkong', 'julang', 'kakatua', 'elang', 'pekakak', 'kuntul', 'daralaut', 'kera', 'tupai', 'biawak', 'kepiting', 'tembakul'];
+const DEXDRAW = {
+  bekantan: t => { ctx.scale(.85, .85); drawBekantan(0, 0, 1, 'sit', false, t); }, badak: t => { ctx.scale(.5, .5); drawBadak(-6, 0, 1, 'stand', t, false); },
+  cendrawasih: t => { ctx.scale(1.2, 1.2); drawCendrawasih(6, 0, 1, 'sit', t); }, penyu: t => drawPenyu(0, -4, 1, t, false, false),
+  rangkong: t => drawRangkong(0, 0, 1, 'perch', t, false), julang: t => drawRangkong(0, 0, 1, 'perch', t, true), kakatua: t => drawKakatua(0, 0, 1, 'perch', t),
+  elang: t => drawElang(0, -18, 1, 'soar', t), pekakak: t => { ctx.scale(1.2, 1.2); drawPekaka(0, 0, 1, 'perch', 0, { waterY: 0 }, t, 99); }, kuntul: t => { ctx.scale(.8, .8); drawKuntul(0, 0, 1, 'walk', t); },
+  daralaut: t => drawDaralaut(0, -18, 1, false, t), kera: t => drawKera(0, 0, 1, false, t, false), tupai: t => { ctx.scale(1.4, 1.4); drawTupai(0, 0, 1, 'sit', t); },
+  biawak: t => { ctx.scale(.7, .7); drawBiawak(0, 0, 1, false, 0, true, t); }, kepiting: t => { ctx.scale(1.2, 1.2); drawKepiting(0, 0, false, t, false); }, tembakul: t => { ctx.scale(1.3, 1.3); drawTembakul(0, 0, 1, false, false, t); }
+};
+function drawDex() {
+  ctx.fillStyle = '#14231B'; ctx.fillRect(0, 0, W, H);
+  const found = DEXORDER.filter(k => DEX[k]).length;
+  text('Ensiklopedia Satwa', 40, 56, 28, '#FFF4E0', 'left', 800);
+  text('Terdokumentasi ' + found + ' dari ' + DEXORDER.length + ' spesies · tersimpan di browser ini', 40, 82, 14, '#B9CBBE', 'left', 400);
+  rrect(40, 92, 300, 6, 3); ctx.fillStyle = '#20362A'; ctx.fill(); if (found) { rrect(40, 92, 300 * found / DEXORDER.length, 6, 3); ctx.fillStyle = '#E07A3F'; ctx.fill(); }
+  button(W - 180, 34, 140, 42, 'Kembali', () => { G.screen = 'menu'; });
+  const cols = 8, cw = 106, chh = 186, gx = 8, x0 = (W - (cols * cw + (cols - 1) * gx)) / 2, y0 = 114;
+  DEXORDER.forEach((k, i) => {
+    const x = x0 + (i % cols) * (cw + gx), y = y0 + Math.floor(i / cols) * (chh + 10), d = DEX[k], sp = SPECIES[k];
+    rrect(x, y, cw, chh, 10); ctx.fillStyle = d ? '#223828' : '#1A2A20'; ctx.fill(); ctx.strokeStyle = d ? '#3D5E48' : '#24382B'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.save(); rrect(x + 6, y + 6, cw - 12, 92, 7); ctx.clip(); ctx.fillStyle = d ? '#2E5238' : '#16241C'; ctx.fillRect(x + 6, y + 6, cw - 12, 92);
+    const im = d && dexImg(k);
+    if (im) ctx.drawImage(im, x + 6 - 12, y + 6, (cw - 12) + 24, 92);
+    else { ctx.translate(x + cw / 2, y + 86); if (!d) { try { ctx.filter = 'brightness(0) opacity(.55)'; } catch (er) {} } DEXDRAW[k](G.time); }
+    ctx.restore();
+    text(d ? sp.name : '???', x + 8, y + 116, 12, d ? '#FFF4E0' : '#5E7566', 'left', 700);
+    if (d) {
+      wrapText(sp.latin, x + 8, y + 132, cw - 14, 13, 10, '#9FB5A6', 400);
+      text('Difoto ' + d.n + 'x · ' + d.q + '%', x + 8, y + 164, 10.5, '#E8A27A', 'left', 600);
+      let bx = x + 8; for (const [vk, lab, col] of [['albino', 'Albino', '#F2E8D5'], ['terdampak', 'Terdampak', '#FFB4A0']]) if (d.v[vk]) { font(9, 700); const tw = ctx.measureText(lab).width + 10; rrect(bx, y + 170, tw, 12, 6); ctx.fillStyle = col; ctx.fill(); text(lab, bx + 5, y + 179, 9, '#1E2B22', 'left', 700); bx += tw + 4; }
+    } else text('Belum ditemukan', x + 8, y + 132, 10, '#4E6456', 'left', 500);
+  });
+}
+// ===== Pameran foto desa (automatic) and the three endings =====
+function expoPick() {
+  const ph = G.photos.filter(p => p.kind !== 'none' && p.kind !== 'clue');
+  const best = {}; for (const p of ph) { const k = p.type + (p.impact ? '!' : ''); if (!best[k] || p.score > best[k].score) best[k] = p; }
+  const all = Object.values(best).sort((a, b) => (b.kind === 'target') - (a.kind === 'target') || (!!b.impact) - (!!a.impact) || b.score - a.score);
+  const pick6 = [], seenKind = { a: 0, t: 0 };
+  for (const p of all) { if (pick6.length >= 6) break; const t = p.kind === 'threat' || p.impact; if (t && seenKind.t >= 3 && all.length > 6) continue; if (!t && seenKind.a >= 4 && all.length > 6) continue; pick6.push(p); t ? seenKind.t++ : seenKind.a++; }
+  const A = new Set(pick6.filter(p => p.kind === 'animal' || p.kind === 'target').map(p => p.type)).size;
+  const T = pick6.filter(p => p.kind === 'threat' || p.impact).length;
+  let end = 'kosong'; if (pick6.length) end = (A >= 2 && T >= 2) || (A >= 1 && pick6.some(p => p.impact) && T >= 2) ? 'sejati' : T > A ? 'waspada' : 'kagum';
+  return { photos: pick6, A, T, end };
+}
+const ENDINGS = {
+  kagum: { title: 'Ending: Kagum', col: '#FFE2A3', text: 'Warga terpukau. "Ternyata satwa di sekitar kita seindah ini!" Banyak yang ingin melihatnya langsung. Tapi tak ada yang bertanya kenapa satwa itu makin jarang terlihat.', hint: 'Coba juga potret ancaman dan satwa yang terdampak.' },
+  waspada: { title: 'Ending: Waspada', col: '#FFC2B0', text: 'Warga terkejut melihat sampah, jerat, dan hutan yang ditebang. Mereka berjanji membersihkan sungai. Tapi banyak yang belum tahu satwa apa yang sedang mereka lindungi.', hint: 'Coba juga potret lebih banyak satwa.' },
+  sejati: { title: 'Ending Sejati: Hutan Kita, Tanggung Jawab Kita', col: '#BFF0C2', text: 'Warga melihat keindahan dan ancamannya sekaligus. Hari itu juga mereka membentuk kelompok penjaga: membersihkan sungai, melepas jerat, dan mencatat satwa yang mereka temui. Foto-fotomu menjadi data pertama mereka.', hint: '' },
+  kosong: { title: 'Pameran Sepi', col: '#D9D2C2', text: 'Dinding pameran masih kosong. Warga pulang tanpa cerita baru tentang hutan mereka.', hint: 'Jepret satwa dan ancaman di sesi berikutnya.' }
+};
+const EXPO_SAY = { target: ['Ini satwa langka itu?', 'Wah, akhirnya ada fotonya!'], animal: ['Cantik sekali!', 'Aku baru tahu ada ini.', 'Itu di dekat desa kita?'], threat: ['Ini sungai kita?', 'Siapa yang buang ini?', 'Harus kita bersihkan.'], impact: ['Kasihan...', 'Gara-gara sampah kita.', 'Ayo kita tolong.'] };
+function goExpo() { G.expo = expoPick(); G.expoT = 0; G.screen = 'expo'; if (G.expo.end === 'sejati') sfxGood(); else sfxSoft(); }
+function drawExpo() {
+  const X = G.expo; G.expoT += 1 / 60; const t = G.expoT;
+  ctx.fillStyle = lg(0, 0, 0, H, ['#E9DFC8', '#D8C9A8']); ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 14; i++) { ctx.fillStyle = i % 2 ? 'rgba(120,90,50,.05)' : 'rgba(255,255,255,.05)'; ctx.fillRect(i * 70, 0, 35, 330); }
+  ctx.fillStyle = '#8A6A44'; ctx.fillRect(0, 330, W, 8); ctx.fillStyle = lg(0, 338, 0, H, ['#7A5C3A', '#5E4428']); ctx.fillRect(0, 338, W, H);
+  text('Pameran Foto Desa', W / 2, 46, 26, '#3A2A1A', 'center', 800);
+  text(G.mission.name + ' · ' + regionName() + ' · Hari ' + G.maxDays, W / 2, 68, 13, '#7A5E40', 'center', 500);
+  const n = X.photos.length, pw = 118, gap = 26, x0 = (W - (n * (pw + 12) + (n - 1) * gap)) / 2;
+  seg(30, 96, W - 30, 96, '#6E5236', 1.4);
+  X.photos.forEach((p, i) => {
+    const appear = clamp((t - i * .35) * 3, 0, 1); if (appear <= 0) return;
+    const x = x0 + i * (pw + 12 + gap), rot = (hsh(i + 3) - .5) * .08 + Math.sin(t * 1.2 + i) * .006;
+    seg(x + (pw + 12) / 2, 96, x + (pw + 12) / 2, 112, '#6E5236', 1); ellG(x + (pw + 12) / 2, 98, 3, 3, 0, '#C84A2A');
+    ctx.save(); ctx.globalAlpha = appear; ctx.translate(0, (1 - appear) * -20); polaroid(p, x, 112, pw, rot);
+    if (p.impact || p.kind === 'threat') { rrect(x + 4, 104, 60, 16, 8); ctx.fillStyle = '#C8402E'; ctx.fill(); text(p.impact ? 'Terdampak' : 'Ancaman', x + 10, 116, 10, '#fff', 'left', 700); }
+    else if (p.kind === 'target') { rrect(x + 4, 104, 54, 16, 8); ctx.fillStyle = '#E0A030'; ctx.fill(); text('Langka', x + 10, 116, 10, '#fff', 'left', 700); }
+    ctx.restore();
+  });
+  if (!n) text('(belum ada foto untuk dipamerkan)', W / 2, 200, 16, '#7A5E40', 'center', 500);
+  // villagers
+  const cols = ['#C8573A', '#3A6E9A', '#E0A030', '#4E8A55', '#8A4A7A', '#D8783A', '#2E5E5A', '#B84A4A'];
+  for (let i = 0; i < 11; i++) { const vx = 50 + i * 82 + (hsh(i) - .5) * 20, vy = 470 + (i % 2) * 18, bob = Math.sin(t * 2 + i) * 1.5, sk = ['#8A5A3A', '#B07850', '#6E4A30'][i % 3];
+    ctx.fillStyle = cols[i % cols.length]; ctx.beginPath(); ctx.moveTo(vx - 22, H); ctx.quadraticCurveTo(vx - 22, vy - 18 + bob, vx, vy - 20 + bob); ctx.quadraticCurveTo(vx + 22, vy - 18 + bob, vx + 22, H); ctx.fill();
+    ellG(vx, vy - 34 + bob, 12, 13, 0, sk); if (i % 3 === 0) { ctx.fillStyle = '#2A2A2A'; ctx.beginPath(); ctx.ellipse(vx, vy - 40 + bob, 13, 8, 0, Math.PI, PI2); ctx.fill(); } else if (i % 3 === 1) { ctx.fillStyle = ['#E8D2A0', '#3A6E9A'][i % 2]; ctx.beginPath(); ctx.ellipse(vx, vy - 38 + bob, 14, 10, 0, Math.PI * .9, Math.PI * 2.1); ctx.fill(); } }
+  // speech bubbles about the photos
+  if (n) for (let k = 0; k < 3; k++) { const ph = (t * .5 + k * 1.3) % 4; if (ph > 2.6) continue; const p = X.photos[(Math.floor(t * .5 + k * 1.3) * 7 + k) % n]; const pool = EXPO_SAY[p.impact ? 'impact' : p.kind] || EXPO_SAY.animal;
+    const say = pool[(Math.floor(t * .5 + k) + k) % pool.length], vx = 120 + k * 300 + (Math.floor(t * .5) % 2) * 60, vy = 390; font(13, 600); const tw = ctx.measureText(say).width + 22;
+    ctx.globalAlpha = Math.min(1, ph * 3, (2.6 - ph) * 3); rrect(vx - tw / 2, vy - 22, tw, 30, 14); ctx.fillStyle = '#FFFDF6'; ctx.fill(); ctx.beginPath(); ctx.moveTo(vx - 6, vy + 8); ctx.lineTo(vx + 4, vy + 8); ctx.lineTo(vx - 4, vy + 18); ctx.fill(); text(say, vx, vy - 2, 13, '#2A2A2A', 'center', 600); ctx.globalAlpha = 1; }
+  // ending card
+  const ea = clamp((t - (n * .35 + 2.2)) * 1.5, 0, 1);
+  if (ea > 0) { const E = ENDINGS[X.end]; ctx.globalAlpha = ea; ctx.fillStyle = 'rgba(12,20,15,.78)'; ctx.fillRect(0, 0, W, H);
+    rrect(150, 124, 660, 236, 18); ctx.fillStyle = '#17281E'; ctx.fill(); ctx.strokeStyle = E.col; ctx.lineWidth = 2; ctx.stroke();
+    text(E.title, W / 2, 172, 24, E.col, 'center', 800);
+    let yy = wrapText(E.text, 190, 214, 580, 23, 16, '#E6EDE7', 400);
+    text('Foto satwa: ' + X.A + ' spesies  ·  Foto ancaman & satwa terdampak: ' + X.T, W / 2, yy + 22, 13, '#B9CBBE', 'center', 600);
+    if (E.hint) text(E.hint, W / 2, yy + 46, 13, '#E8A27A', 'center', 600);
+    ctx.globalAlpha = 1;
+    if (ea >= 1) button(W / 2 - 100, 380, 200, 44, 'Lihat arsip desa', () => { G.screen = 'archive'; }, { primary: true });
+  } else button(W - 150, 20, 130, 36, 'Lewati', () => { G.expoT = 99; }, { size: 14 });
+}
 
 // ===== Art helpers =====
 const PI2 = Math.PI * 2;
@@ -1560,7 +1725,13 @@ function buildTree(T, R) {
     if (sp === 'meranti') buttress(x, base, 11 * sc); else if (sp === 'ketapang') buttress(x, base, 6 * sc);
     if (sp === 'apiapi') pneumato(x - 70 * sc, x + 70 * sc, base - 2, R, '#6E6656');
   }
-  if (main) { ell(x, base + 3, 70 * sc, 7 * sc, 'rgba(20,14,8,.28)'); drawLimbs(T.L, T.ci, R); }
+  if (main) {
+    ellG(x, base - 1, 44 * sc, 4.5 * sc, 0, 'rgba(20,14,8,.18)');
+    if (sp !== 'bakau' && sp !== 'apiapi') for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { const ex = x + sd * (16 + k * 13 + R() * 6) * sc, ey = base + 3 + k * 2.5;
+      const g = lg(0, base - 24, 0, ey, [bark[1], bark[2]]); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x + sd * (3 + k * 2) * sc, base - 26 * sc + k * 6);
+      ctx.quadraticCurveTo(x + sd * (10 + k * 6) * sc, base - 6, ex, ey); ctx.quadraticCurveTo(x + sd * (6 + k * 6) * sc, base, x + sd * (1 + k) * sc, base - 4); ctx.closePath(); ctx.fill();
+      curve(x + sd * (4 + k * 2) * sc, base - 22 * sc + k * 6, x + sd * (10 + k * 6) * sc, base - 8, ex - sd * 2, ey - 2, .9, 'rgba(255,230,190,.18)'); }
+    drawLimbs(T.L, T.ci, R); }
   if (sp === 'bakau') { const pts = main ? [-.9, -.62, -.4, .45, .7, .92].map(d => [x + d * 130 * sc, limbY(T.L.canopy[T.ci], Math.abs(d)) + 8]) : [-70, -40, 45, 75].map(dx => [x + dx * sc, by - 10]); for (const pt of pts) { if (R() < .3) continue; dropRoot(pt[0], pt[1], pt[0] + Math.sign(pt[0] - x) * (12 + R() * 22), base + 6, 3.4 * sc, '#4A3428', R); } }
   // crown sprite
   const SW = (sp === 'beringin' ? 500 : 440) * sc + 60, SH = (sp === 'meranti' ? 360 : 300) * sc + 80, ox = SW / 2, oy = SH - 50;
@@ -1706,6 +1877,22 @@ function envDetail(L, R, w) {
   // bank shrubs (sparser on the beach)
   for (let x = 10; x < w; x += (k === 'estuary' ? 120 : 46) + R() * 60) { if (R() < .25) continue; shrub(x, by + R() * 4, .7 + R() * .6, pal, R); }
   if (k === 'river' || k === 'pedada') {
+    const WY = k === 'river' ? 404 : 414, top = by + 10;
+    // bank face: soil strata, wet dark mud toward the water, roots poking out
+    ctx.lineWidth = 1.4; for (let j = 0; j < 3; j++) { ctx.strokeStyle = 'rgba(40,26,16,' + (.12 + j * .04) + ')'; ctx.beginPath(); for (let x = 0; x <= w; x += 12) { const yy = lerp(top + 8, WY - 10, (j + 1) / 4) + Math.sin(x * .02 + j * 2) * 3 + Math.sin(x * .07 + j) * 1.2; x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); } ctx.stroke(); }
+    { const g = ctx.createLinearGradient(0, WY - 18, 0, WY + 1); g.addColorStop(0, 'rgba(40,28,18,0)'); g.addColorStop(1, 'rgba(40,28,18,.55)'); ctx.fillStyle = g; ctx.fillRect(0, WY - 18, w, 19); }
+    for (let x = 20; x < w; x += 30 + R() * 50) { const len = 8 + R() * 16, yy = top + 6 + R() * 18; curve(x, yy, x + (R() - .5) * 10, yy + len * .6, x + (R() - .5) * 8, yy + len, 1 + R() * 1.4, 'rgba(60,40,26,.75)'); }
+    // grass blades hanging over the bank top
+    for (let x = 0; x < w; x += 5 + R() * 6) { const hl = 4 + R() * 8; curve(x, by + 4, x + 2, by + 4 + hl * .5, x + 3 + R() * 3, by + 4 + hl, 1.1, R() < .5 ? '#5E8A40' : '#7AAA52'); }
+    // waterline: stones, a wavy light edge, reeds
+    for (let x = 6; x < w; x += 18 + R() * 40) { const r = 3 + R() * 5; ellG(x, WY - 1, r, r * .6, 0, R() < .5 ? '#7E766A' : '#68604E'); ellG(x - r * .3, WY - 1 - r * .25, r * .5, r * .22, 0, 'rgba(255,255,255,.25)'); }
+    ctx.strokeStyle = 'rgba(235,250,245,.5)'; ctx.lineWidth = 1.2; ctx.beginPath(); for (let x = 0; x <= w; x += 6) { const yy = WY + 1.5 + Math.sin(x * .08) * .8; x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); } ctx.stroke();
+    for (let x = 40; x < w; x += 90 + R() * 160) { if (R() < .35) continue; for (let j = 0; j < 7; j++) { const rx = x + j * 3 + (R() - .5) * 4, rh = 14 + R() * 18; curve(rx, WY + 2, rx + (R() - .5) * 6, WY - rh * .5, rx + (R() - .5) * 10, WY - rh, 1.4, j % 2 ? '#5E7E3A' : '#7E9A4A'); if (j === 3 && R() < .6) { ellG(rx + 1, WY - rh - 3, 1.6, 4.5, .2, '#6E4A2A'); } } }
+    // water: darker depth, sky glints, ripple rings, floating leaves
+    { const g = ctx.createLinearGradient(0, WY, 0, H); g.addColorStop(0, 'rgba(255,255,255,.06)'); g.addColorStop(.4, 'rgba(10,30,34,0)'); g.addColorStop(1, 'rgba(10,30,34,.3)'); ctx.fillStyle = g; ctx.fillRect(0, WY + 2, w, H - WY); }
+    for (let i = 0; i < w / 30; i++) { const x = R() * w, yy = WY + 8 + R() * (H - WY - 20); ellG(x, yy, 10 + R() * 30, .9, 0, 'rgba(230,248,250,' + (.12 + R() * .14) + ')'); }
+    for (let i = 0; i < w / 160; i++) { const x = R() * w, yy = WY + 20 + R() * 80; ctx.strokeStyle = 'rgba(230,248,250,.25)'; ctx.lineWidth = .8; for (const r of [6, 11]) { ctx.beginPath(); ctx.ellipse(x, yy, r, r * .3, 0, 0, PI2); ctx.stroke(); } }
+    for (let i = 0; i < w / 60; i++) { const x = R() * w, yy = WY + 10 + R() * 100; ellG(x, yy, 3.2, 1.4, R() * 3, ['#B5883E', '#8DB35A', '#C9A24A'][Math.floor(R() * 3)]); }
     for (let i = 0; i < w / 14; i++) { const x = R() * w, y = by + 2 + R() * 10; const col = ['#F4F1E6', '#F2D24A', '#E98AA6', '#C9A6E8'][Math.floor(R() * 4)]; seg(x, y + 5, x, y, '#5E8A40', 1); ell(x, y, 1.8, 1.8, col); }
     for (let i = 0; i < w / 22; i++) ell(R() * w, by + 16 + R() * 30, 1.6 + R() * 2.6, 1 + R() * 1.4, R() < .5 ? '#8E8576' : '#6E665A');
     for (let i = 0; i < w / 18; i++) ell(R() * w, by + 12 + R() * 34, 2.6, 1.2, ['#B5883E', '#C9A24A', '#8E5A2E'][Math.floor(R() * 3)], R() * 3);
@@ -1998,7 +2185,7 @@ function startSession(spot) {
 }
 function spawnAnimal() {
   const s = SS; const type = pick(s.spot.fauna);
-  const e = scaled(MAKERS[type](s.L)); e.sc *= .9 + Math.random() * .18; e.t = 0; s.ents.push(e);
+  const e = applyVariant(scaled(MAKERS[type](s.L))); e.sc *= .9 + Math.random() * .18; e.t = 0; s.ents.push(e);
 }
 function shoot() {
   const s = SS; if (!s || s.ended || s.shots <= 0) return;
@@ -2017,21 +2204,24 @@ function processShot() {
     const cen = 1 - clamp(Math.hypot(csx - cx, c.y - cy) / hd, 0, 1); const info = infoOf(e); let q; let mom = false;
     if (e.kind === 'animal' || e.kind === 'target') { mom = e.moment(); q = Math.round(100 * (0.45 * cen + 0.4 * (mom ? 1 : 0) + 0.15 * clar)); if (!mom) q = Math.min(q, 60); }
     else q = Math.round(100 * (0.7 * cen + 0.3 * clar));
-    const score = Math.round(info.pts * (0.5 + q / 100) * evMult);
+    const score = Math.round(info.pts * (0.5 + q / 100) * evMult * (e.albino ? 2 : 1) * (e.impact ? 1.3 : 1));
     if (!best || score > best.score) best = { e, info, q, score, mom };
   }
-  let photo;
+  let photo, dexNew = false;
   if (!best) { photo = { img: pc, title: 'Tidak ada objek', sub: '', kind: 'none', q: 0, score: 0 }; toast('Tidak ada objek di bingkai', '#D9D2C2'); }
   else {
     const e = best.e;
-    photo = { img: pc, title: best.info.name, sub: best.info.latin, kind: e.kind, q: best.q, score: best.score, mom: best.mom, type: e.type, day: G.day, spot: s.spot.name };
+    photo = { img: pc, title: best.info.name + (e.albino ? ' albino' : ''), sub: best.info.latin, kind: e.kind, q: best.q, score: best.score, mom: best.mom, type: e.type, day: G.day, spot: s.spot.name, impact: e.impact || null, albino: !!e.albino };
+    if (e.kind === 'animal' || e.kind === 'target') dexNew = dexRecord(e.type, photo, pc, e.albino ? 'albino' : e.impact ? 'terdampak' : null);
     if (e.kind === 'target') {
       G.targetFound = true; s.gotTargetToday = true; G.species.set(best.info.name, best.info.latin);
       if (!G.bestTarget || best.q > G.bestTarget.q) G.bestTarget = photo;
       toast(tgtName() + ' terdokumentasi! ' + best.q + '%  +' + best.score, '#FFD98A'); sfxGood();
     } else if (e.kind === 'animal') {
       G.species.set(best.info.name, best.info.latin);
-      toast(best.info.name + ' · ' + best.q + '%' + (best.mom ? ' · momen!' : '') + '  +' + best.score, best.mom ? '#FFE7A3' : '#FFFFFF');
+      toast(best.info.name + (e.albino ? ' ALBINO' : '') + ' · ' + best.q + '%' + (best.mom ? ' · momen!' : '') + '  +' + best.score, e.albino ? '#FFFFFF' : best.mom ? '#FFE7A3' : '#FFFFFF');
+      if (e.albino) { toast('Langka sekali! Satwa albino terdokumentasi', '#F6E8FF'); sfxGood(); }
+      if (e.impact) { if (!s.impactDone) { s.impactDone = {}; } if (!s.impactDone[e.type]) { s.impactDone[e.type] = 1; G.reports++; G.reportList.push(best.info.name + ' ' + e.impact); s.dayReports.push(best.info.name + ' ' + e.impact); } toast('Satwa ' + e.impact + ': laporan dikirim ke desa', '#FFC2B0'); }
     } else if (e.kind === 'clue') {
       const cd = CLUEDEF[e.type];
       if (s.dayClues.indexOf(cd) < 0) { s.dayClues.push(cd); G.bonus[cd.to] = Math.min(0.6, (G.bonus[cd.to] || 0) + cd.bonus); }
@@ -2041,6 +2231,7 @@ function processShot() {
       toast('Laporan terkirim ke desa: ' + best.info.name, '#FFC2B0');
     }
   }
+  if (best && dexNew) toast('Entri baru di Ensiklopedia: ' + best.info.name, '#BFE3FF');
   G.total += photo.score; G.photos.push(photo); s.dayPhotos.push(photo); s.last = photo; s.lastT = 0; s.flash = 1;
 }
 function updSession(dt) {
@@ -2257,6 +2448,9 @@ function polaroid(p, x, y, w, rot) {
   ctx.restore();
 }
 function drawMenu() {
+  const ss0 = SS; SS = null; try { drawMenu0(); } finally { SS = ss0; }
+}
+function drawMenu0() {
   const ML = LAYOUTS.river; drawScene(ML, G.time, 0.7);
   ctx.save(); ctx.translate(690, ML.canopy[1].y + 2); ctx.scale(1.7, 1.7); drawBekantan(0, 0, -1, 'sit', Math.sin(G.time * .5) > .3, G.time); ctx.restore();
   G.menuParts = updParts(G.menuParts || [], ML, 1 / 60, 0.7); drawParts(G.menuParts); drawForeground(ML, G.time, 0.7); drawOverlay(ML, G.time, 0.7);
@@ -2266,22 +2460,23 @@ function drawMenu() {
   wrapText('Satu jepretan untuk menjaga hutan dan pesisir Indonesia.', 60, 304, 400, 24, 18, '#D7E6DA', 400);
   button(60, 350, 190, 50, 'Mulai', () => { G.screen = 'missions'; }, { primary: true, size: 19 });
   button(266, 350, 170, 50, 'Cara Main', () => { G.howto = true; });
+  button(60, 414, 376, 44, 'Ensiklopedia Satwa (' + DEXORDER.filter(k => DEX[k]).length + '/' + DEXORDER.length + ')', () => { G.screen = 'dex'; }, { size: 16 });
   text('Satu mekanik: bidik dan jepret', 60, 500, 13, 'rgba(255,255,255,.65)', 'left', 500);
 }
 function drawHowto() {
   ctx.fillStyle = 'rgba(5,12,9,.7)'; ctx.fillRect(0, 0, W, H); UI = [];
-  rrect(170, 60, 620, 420, 16); ctx.fillStyle = '#F6EFE2'; ctx.fill();
-  text('Cara main', 200, 108, 28, '#1E2B22', 'left', 800);
+  rrect(170, 30, 620, 480, 16); ctx.fillStyle = '#F6EFE2'; ctx.fill();
+  text('Cara main', 200, 78, 28, '#1E2B22', 'left', 800);
   const lines = [
     'Gerakkan mouse atau jari untuk membidik. Klik, ketuk, atau tekan Spasi untuk menjepret.',
     'Bingkai menyala kuning saat satwa sedang beraksi. Itulah momen terbaik.',
     'Satwa pemalu kabur kalau dibidik terlalu lama.',
     'Satu sesi 40 detik dengan ' + SHOTS + ' jepretan. Penanda kuning (?) adalah petunjuk, penanda merah (!) adalah ancaman yang bisa dilaporkan.',
     'Petunjuk menaikkan peluang satwa target muncul di titik lain. Foto ancaman dikirim sebagai laporan ke desa.',
-    'Misi berhasil jika satwa target terfoto dalam ' + MAX_DAYS + ' hari.'
+    'Misi berhasil jika satwa target terfoto dalam ' + MAX_DAYS + ' hari. Di akhir, desa memamerkan foto-fotomu, dan apa yang kamu potret menentukan ending.'
   ];
-  let y = 150; for (const l of lines) { ell(206, y - 6, 4, 4, '#E07A3F'); y = wrapText(l, 222, y, 530, 22, 16, '#2D3A31', 400) + 34; }
-  button(610, 418, 150, 44, 'Mengerti', () => { G.howto = false; }, { primary: true });
+  let y = 118; for (const l of lines) { ell(206, y - 6, 4, 4, '#E07A3F'); y = wrapText(l, 222, y, 530, 22, 16, '#2D3A31', 400) + 34; }
+  button(610, 452, 150, 44, 'Mengerti', () => { G.howto = false; }, { primary: true });
 }
 // Per-mission card art: a small habitat scene behind each animal.
 function drawMissionArt(m, x, y, w, h, t) {
@@ -2433,7 +2628,7 @@ function drawSummary() {
   if (G.offerSwitch) {
     rrect(40, 420, W - 80, 62, 12); ctx.fillStyle = '#2A3F31'; ctx.fill();
     wrapText('Warga: "' + ((G.mission.villager || {})[G.region] || 'Belum pernah ada yang melihat ' + G.mission.short + ' di sini.') + ' ' + G.mission.hint + '"', 58, 446, W - 120, 20, 14, '#F2E8D5', 400);
-    button(W - 420, 492, 210, 38, 'Pindah daerah (1x)', () => { G.switchUsed = true; G.offerSwitch = false; G.day++; G.screen = G.day > G.maxDays ? 'archive' : 'map'; if (G.screen === 'archive') sfxSoft(); }, { primary: true, size: 15 });
+    button(W - 420, 492, 210, 38, 'Pindah daerah (1x)', () => { G.switchUsed = true; G.offerSwitch = false; G.day++; if (G.day > G.maxDays) { G.day = G.maxDays; goExpo(); } else G.screen = 'map'; }, { primary: true, size: 15 });
     button(W - 200, 492, 160, 38, 'Tetap di sini', () => { G.switchUsed = true; G.offerSwitch = false; nextDay(); }, { size: 15 });
     return;
   }
@@ -2445,10 +2640,10 @@ function drawSummary() {
   if (!lines.length) lines.push(['Tidak ada petunjuk baru hari ini.', '#B9CBBE']);
   lines.slice(0, 3).forEach(l => { text(l[0], 40, y, 14, l[1], 'left', 600); y += 20; });
   const last = G.day >= G.maxDays;
-  if (G.targetFound && !last) button(W - 430, 492, 200, 38, 'Selesaikan misi', () => { G.screen = 'archive'; sfxGood(); }, { size: 15 });
+  if (G.targetFound && !last) button(W - 430, 492, 200, 38, 'Selesaikan misi', () => goExpo(), { size: 15 });
   button(W - 220, 492, 180, 38, last ? 'Lihat hasil misi' : 'Lanjut ke Hari ' + (G.day + 1), () => nextDay(), { primary: true, size: 15 });
 }
-function nextDay() { G.day++; if (G.day > G.maxDays) { G.day = G.maxDays; G.screen = 'archive'; if (G.targetFound) sfxGood(); else sfxSoft(); } else G.screen = 'region'; }
+function nextDay() { G.day++; if (G.day > G.maxDays) { G.day = G.maxDays; goExpo(); } else G.screen = 'region'; }
 function star(x, y, r, on) {
   ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5; const rr = i % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath();
   ctx.fillStyle = on ? '#FFD34D' : 'rgba(255,255,255,.15)'; ctx.fill();
@@ -2492,6 +2687,8 @@ function frame(ts) {
   else if (G.screen === 'region') drawRegion();
   else if (G.screen === 'summary') drawSummary();
   else if (G.screen === 'archive') drawArchive();
+  else if (G.screen === 'expo') drawExpo();
+  else if (G.screen === 'dex') drawDex();
   if (G.screen !== prevScreen) { fade = prevScreen ? 0.85 : 1; prevScreen = G.screen; }
   if (fade > 0) { ctx.fillStyle = 'rgba(8,14,10,' + fade + ')'; ctx.fillRect(0, 0, W, H); fade = Math.max(0, fade - dt * 3.2); }
   cv.style.cursor = G.screen === 'session' ? 'none' : (hovering ? 'pointer' : 'default');
