@@ -322,29 +322,103 @@ const SEALABELS = [['Samudra Hindia', 130, 430], ['Selat Malaka', 112, 150], ['L
 function hash2(x, y) { let h = x * 374761393 + y * 668265263; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 const MAPDIST = (() => { const d = new Uint8Array(GW * GH).fill(9); for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { if (MAPGRID[y * GW + x]) { d[y * GW + x] = 0; continue; } let best = 9; for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= GW || yy >= GH) continue; if (MAPGRID[yy * GW + xx]) best = Math.min(best, Math.max(Math.abs(dx), Math.abs(dy))); } d[y * GW + x] = best; } return d; })();
 const MAPIMG = {};
-function mapImage(hoverCode) {
-  if (MAPIMG[hoverCode]) return MAPIMG[hoverCode];
-  const c = document.createElement('canvas'); c.width = GW; c.height = GH; const g = c.getContext('2d'); const im = g.createImageData(GW, GH); const d = im.data;
+// The Indonesia map, drawn as pixel terrain: forest with relief, beaches, mangrove fringes, mountains inland,
+// sea that gets deeper away from the coast, reefs in the east. Built once; a hovered island is a brightened copy.
+let MAPBASE = null;
+function mapBase() {
+  if (MAPBASE) return MAPBASE;
   const hex = h => [parseInt(h.substr(1, 2), 16), parseInt(h.substr(3, 2), 16), parseInt(h.substr(5, 2), 16)];
-  const C = { sea: hex('#0F3446'), sea2: hex('#123C50'), wave: hex('#1E5068'), sh1: hex('#2A6E86'), sh2: hex('#1D566E'), sh3: hex('#164861'),
-    nb: hex('#3B463C'), nbL: hex('#4A574A'), nbD: hex('#2C352D'), land: hex('#5E8E56'), landL: hex('#86B872'), landD: hex('#3E6A3E'), land2: hex('#557F4E'),
-    hov: hex('#8FC877'), hovL: hex('#B9E59C'), hovD: hex('#5E9A52') };
+  const mix = (a, b, t) => [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t));
   const at = (x, y) => (x < 0 || y < 0 || x >= GW || y >= GH) ? 0 : MAPGRID[y * GW + x];
+  // distance from the sea inside the land (capped)
+  const LD = new Uint8Array(GW * GH); const q = [];
+  for (let i = 0; i < GW * GH; i++) { if (MAPGRID[i]) LD[i] = 99; else { LD[i] = 0; q.push(i); } }
+  for (let h = 0; h < q.length; h++) { const i = q[h], x = i % GW, y = (i / GW) | 0, n = LD[i] + 1; if (n > 12) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= GW || yy >= GH) continue; const j = yy * GW + xx; if (LD[j] > n) { LD[j] = n; q.push(j); } } }
+  const C = { sea: hex('#0D3044'), sea2: hex('#164A62'), sh1: hex('#2C7F90'), sh2: hex('#22677E'), sh3: hex('#1A5670'), reef: hex('#3A9C98'), reef2: hex('#2E8A8A'),
+    sand: hex('#D4C08A'), sandD: hex('#BFA874'), mang: hex('#2E5C46'), low: hex('#5B8C4C'), f: [hex('#2E6236'), hex('#376C3C'), hex('#2A5932'), hex('#417844')],
+    fL: hex('#62A058'), fD: hex('#21482A'), hill: hex('#6E8A50'), rock: hex('#8E8A6E'), peak: hex('#B4AE94'), nb: hex('#3A443C') };
+  const hg = (x, y) => vnoise(x * .06 + 3, y * .06) * .65 + vnoise(x * .16, y * .16 + 7) * .35;
+  const c = document.createElement('canvas'); c.width = GW; c.height = GH; const g = c.getContext('2d'), im = g.createImageData(GW, GH), d = im.data;
   for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
-    const i = y * GW + x, v = MAPGRID[i]; let col;
+    const i = y * GW + x, v = MAPGRID[i], h = hash2(x, y); let col;
     if (!v) {
-      const dist = MAPDIST[i]; const h = hash2(x, y);
-      col = dist === 1 ? C.sh1 : dist === 2 ? C.sh2 : dist === 3 ? C.sh3 : (h < .08 ? C.sea2 : C.sea);
-      if (dist > 3 && ((x + Math.floor(y / 6) * 5) % 23 < 3) && y % 6 === 0) col = C.wave;
+      const dist = MAPDIST[i], nz = vnoise(x * .07, y * .07);
+      if (dist === 1) col = C.sh1; else if (dist === 2) col = C.sh2; else if (dist === 3) col = C.sh3;
+      else col = mix(C.sea2, C.sea, clamp((dist - 3) / 5, 0, 1) * .8 + nz * .2);
+      if (dist <= 2 && x > 150 && vnoise(x * .4, y * .4) > .6) col = h < .5 ? C.reef : C.reef2; // coral reefs in the east
     } else {
-      const top = at(x, y - 1) !== v || at(x - 1, y) !== v, bot = at(x, y + 1) !== v || at(x + 1, y) !== v;
-      if (v === 1) col = top ? C.nbL : bot ? C.nbD : C.nb;
-      else if (v === hoverCode) col = top ? C.hovL : bot ? C.hovD : C.hov;
-      else col = top ? C.landL : bot ? C.landD : (hash2(x, y) < .25 ? C.land2 : C.land);
+      const ld = LD[i], e = hg(x, y) * clamp((ld - 3) / 8, 0, 1); // elevation grows inland
+      if (ld === 1) col = h < .7 ? (h < .35 ? C.sand : C.sandD) : C.mang;
+      else if (ld === 2 && h < .45) col = C.mang;
+      else if (ld <= 3) col = C.low;
+      else { col = C.f[Math.floor(vnoise(x * .3, y * .3) * 3.99)];
+        const pat = (x + y * 2) % 3; if (pat === 0 && h < .55) col = C.fL; else if (pat === 2 && h < .45) col = C.fD;
+        if (e > .55) col = mix(col, C.hill, clamp((e - .55) * 4, 0, 1)); if (e > .7) col = mix(col, C.rock, clamp((e - .7) * 5, 0, 1)); if (e > .78 && h < .6) col = C.peak; }
+      // light from the upper left
+      const sl = clamp((hg(x - 1, y - 1) - hg(x + 1, y + 1)) * 8, -1, 1) * (ld > 2 ? .16 : .06);
+      col = col.map(cc => clamp(Math.round(cc + (sl > 0 ? (255 - cc) * sl : cc * sl)), 0, 255));
+      if (v === 1) col = mix(col, C.nb, .62); // neighbouring countries stay muted
     }
     d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = 255;
   }
-  g.putImageData(im, 0, 0); MAPIMG[hoverCode] = c; return c;
+  g.putImageData(im, 0, 0);
+  // what the animation needs: open sea for waves, the surf line, each island's outline
+  const A = { deep: [], foam: [], outline: {} };
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const i = y * GW + x, v = MAPGRID[i];
+    if (!v) { if (MAPDIST[i] === 1) A.foam.push([x, y, hash2(x + 3, y) * 6.28]); else if (MAPDIST[i] > 3 && y % 6 === 0) A.deep.push([x, y]); }
+    else if (v >= 2 && (at(x + 1, y) !== v || at(x - 1, y) !== v || at(x, y + 1) !== v || at(x, y - 1) !== v)) (A.outline[v] = A.outline[v] || []).push([x, y]); }
+  // shipping lanes: long stretches of open sea
+  const runs = []; for (let y = 40; y < 168; y += 7) { let x0 = -1; for (let x = 2; x <= GW - 2; x++) { const ok = x < GW - 2 && !MAPGRID[y * GW + x] && MAPDIST[y * GW + x] > 2; if (ok && x0 < 0) x0 = x; if (!ok && x0 >= 0) { if (x - x0 > 34) runs.push([x0 + 3, x - 4, y]); x0 = -1; } } }
+  runs.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0])); A.ships = [];
+  for (const r of runs) { if (A.ships.length >= 3) break; if (A.ships.some(s2 => Math.abs(s2.y - r[2]) < 20)) continue; A.ships.push({ x0: r[0], x1: r[1], y: r[2], ph: hash2(r[0], r[2]) }); }
+  A.clouds = [0, 1, 2, 3].map(i => ({ x: hash2(i, 9) * 360, y: 36 + hash2(4, i) * 120, w: 16 + hash2(i + 2, 3) * 16, h: 6 + hash2(i, 5) * 5, v: 1.5 + hash2(i, 1) * 1.5 }));
+  A.birds = null; A.nextBirds = 4;
+  return (MAPBASE = { c, A });
+}
+function mapImage(hoverCode) {
+  if (MAPIMG[hoverCode]) return MAPIMG[hoverCode];
+  const B = mapBase(); if (!hoverCode) return (MAPIMG[0] = B.c);
+  const c = document.createElement('canvas'); c.width = GW; c.height = GH; const g = c.getContext('2d'); g.drawImage(B.c, 0, 0);
+  const im = g.getImageData(0, 0, GW, GH), d = im.data;
+  for (let i = 0; i < GW * GH; i++) if (MAPGRID[i] === hoverCode) { const k = i * 4; d[k] = Math.min(255, d[k] * 1.12 + 22); d[k + 1] = Math.min(255, d[k + 1] * 1.12 + 20); d[k + 2] = Math.min(255, d[k + 2] * 1.05 + 4); }
+  g.putImageData(im, 0, 0); return (MAPIMG[hoverCode] = c);
+}
+let MAPFX = null;
+function drawMapLife(t, dt, hovCode) {
+  const A = mapBase().A; if (!MAPFX) { MAPFX = document.createElement('canvas'); MAPFX.width = GW; MAPFX.height = GH; }
+  const g = MAPFX.getContext('2d'); g.clearRect(0, 0, GW, GH); const px = (x, y, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), 1, 1); };
+  // waves rolling across the open sea
+  const sh = Math.floor(t * 2); g.fillStyle = 'rgba(70,130,160,.5)';
+  for (const w of A.deep) { const q = (w[0] + Math.floor(w[1] / 6) * 5 + sh) % 23; if (q < 3) g.fillRect(w[0], w[1], 1, 1); }
+  // surf along every coast
+  for (const f of A.foam) { const a = Math.sin(t * 1.6 + f[2] + f[0] * .12); if (a > .45) px(f[0], f[1], 'rgba(225,245,248,' + ((a - .45) * .85) + ')'); }
+  // ships on the long sea lanes, with a wake
+  for (const s2 of A.ships) { const span = s2.x1 - s2.x0, u = (t * 1.4 / span + s2.ph) % 2, k = u < 1 ? u : 2 - u, x = s2.x0 + span * (k * k * (3 - 2 * k)), dir = u < 1 ? 1 : -1;
+    for (let i = 1; i <= 5; i++) px(x - dir * (i + 1), s2.y + (i % 2 ? .4 : -.4), 'rgba(230,245,250,' + (.4 - i * .07) + ')');
+    px(x - 1, s2.y, '#6A4A30'); px(x, s2.y, '#7A5634'); px(x + 1, s2.y, '#6A4A30'); px(x, s2.y - 1, '#F2EAD6'); }
+  // the hovered island's coast glows
+  if (hovCode && A.outline[hovCode]) { const a = .45 + .3 * Math.sin(t * 4); g.fillStyle = 'rgba(255,224,130,' + a + ')'; for (const o of A.outline[hovCode]) g.fillRect(o[0], o[1], 1, 1); }
+  // cloud shadows, then the clouds a little higher up
+  for (const pass of [0, 1]) { g.fillStyle = pass ? 'rgba(255,255,255,.2)' : 'rgba(0,12,20,.16)';
+    for (const cl of A.clouds) { const x = ((cl.x + t * cl.v) % (GW + 80)) - 40 - (pass ? 5 : 0), y = cl.y - (pass ? 7 : 0);
+      // a few round puffs: the middle one biggest
+      for (const [ox, oy, rr] of [[-cl.w * .45, 1, .55], [0, -1, .8], [cl.w * .42, 1.5, .5], [cl.w * .15, -cl.h * .45, .45]]) { const rx = cl.w * rr * .6, ry = cl.h * rr;
+        for (let yy = -Math.round(ry); yy <= ry; yy++) { const hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - (yy / ry) ** 2))); g.fillRect(Math.round(x + ox - hw), Math.round(y + oy + yy), hw * 2, 1); } } } }
+  // a flock now and then
+  A.nextBirds -= dt;
+  if (!A.birds && A.nextBirds <= 0) { const dd = Math.random() < .5 ? 1 : -1; A.birds = { x: dd > 0 ? -10 : GW + 10, y: rnd(40, 160), d: dd, n: 3 + Math.floor(Math.random() * 3) }; }
+  if (A.birds) { const B = A.birds; B.x += B.d * 12 * dt;
+    for (let i = 0; i < B.n; i++) { const bx = B.x - B.d * (i * 4 + (i % 2) * 2), by = B.y + (i % 2 ? 3 : -1) * Math.ceil(i / 2), fl = Math.sin(t * 9 + i) > 0 ? 1 : 0;
+      px(bx + 2, by + 9, 'rgba(0,0,0,.18)'); px(bx, by, '#1E2226'); px(bx - 1, by - fl, '#1E2226'); px(bx + 1, by - fl, '#1E2226'); }
+    if (B.x < -20 || B.x > GW + 20) { A.birds = null; A.nextBirds = rnd(6, 12); } }
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(MAPFX, 0, 0, W, H); ctx.imageSmoothingEnabled = true;
+}
+function compass(x, y, r) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.beginPath(); ctx.arc(0, 0, r + 8, 0, PI2); ctx.fillStyle = 'rgba(6,20,28,.55)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,240,210,.35)'; ctx.lineWidth = 1; ctx.stroke();
+  for (let i = 0; i < 4; i++) { ctx.rotate(i ? Math.PI / 2 : 0); ctx.fillStyle = i === 0 ? '#E8744A' : 'rgba(255,244,224,.85)'; ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(4, 0); ctx.lineTo(-4, 0); ctx.closePath(); ctx.fill(); }
+  ctx.restore(); text('U', x, y - r - 12, 11, '#FFE2C7', 'center', 800);
 }
 function regionAt(px, py) {
   const cx = Math.floor(px / CELL), cy = Math.floor(py / CELL);
@@ -1088,17 +1162,20 @@ const ENDINGS = {
 const EXPO_SAY = { target: ['Ini satwa langka itu?', 'Wah, akhirnya ada fotonya!'], animal: ['Cantik sekali!', 'Aku baru tahu ada ini.', 'Itu di dekat desa kita?'], threat: ['Ini sungai kita?', 'Siapa yang buang ini?', 'Harus kita bersihkan.'], impact: ['Kasihan...', 'Gara-gara sampah kita.', 'Ayo kita tolong.'] };
 function goExpo() { G.expo = expoPick(); G.expoT = 0; G.expoStage = 0; G.expoEndT = 0; G.screen = 'expo'; if (G.expo.end === 'sejati') sfxGood(); else sfxSoft(); }
 const VSHIRT = ['#C8573A', '#3A6E9A', '#E0A030', '#4E8A55', '#8A4A7A', '#D8783A', '#2E5E5A', '#B84A4A', '#5A6E9A', '#9A7A3A'];
-function drawVillager(i, t, lookX) {
+function drawVillager(i, t, lookX, talk) {
   const kid = i === 2 || i === 7, vx = 52 + i * 95 + (hsh(i) - .5) * 24, base = H + 4, sc = kid ? .72 : 1 + (hsh(i + 9) - .5) * .12, bob = Math.sin(t * 1.8 + i) * 1.2;
   const head = ['hair', 'peci', 'hijab', 'caping', 'hair', 'hijab', 'peci', 'hair', 'hijab', 'caping'][i], skin = ['#8A5A3A', '#A8704A', '#6E4A30', '#B07A52'][i % 4], shirt = VSHIRT[i];
-  const pointing = (i === 1 || i === 6) && Math.sin(t * .7 + i) > 0, lean = clamp((lookX - vx) / 600, -.12, .12);
+  const pointing = (i === 1 || i === 6) && Math.sin(t * .7 + i) > 0, lean = clamp((lookX - vx) / 600, -.12, .12) + (talk ? Math.sin(t * 7 + i) * .05 : 0);
   ctx.save(); ctx.translate(vx, base); ctx.scale(sc, sc);
-  const sy = -96 + bob;
+  const sy = -96 + bob + (talk ? Math.abs(Math.sin(t * 5 + i)) * -1.5 : 0);
   // body (back view) with shoulders
   ctx.fillStyle = shirt; ctx.beginPath(); ctx.moveTo(-30, 4); ctx.lineTo(-30, sy + 30); ctx.quadraticCurveTo(-30, sy + 10, -14, sy + 6); ctx.lineTo(14, sy + 6); ctx.quadraticCurveTo(30, sy + 10, 30, sy + 30); ctx.lineTo(30, 4); ctx.closePath(); ctx.fill();
   if (i % 3 === 0) { ctx.fillStyle = 'rgba(255,240,200,.22)'; for (let r = 0; r < 5; r++) for (let c = 0; c < 4; c++) { ctx.beginPath(); ctx.arc(-22 + c * 15 + (r % 2) * 7, sy + 20 + r * 16, 3, 0, PI2); ctx.fill(); } }
   else if (i % 3 === 1) { ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(-30, sy + 40, 60, 6); ctx.fillRect(-30, sy + 58, 60, 3); }
   ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(-2, sy + 8, 4, 100);
+  // light from the photos above-left: a soft shade on the right side, a rim on the left shoulder
+  { const g = ctx.createLinearGradient(-30, 0, 30, 0); g.addColorStop(0, 'rgba(255,240,210,.12)'); g.addColorStop(.45, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,10,0,.22)'); ctx.fillStyle = g; ctx.fillRect(-30, sy + 6, 60, 110); }
+  curve(-29, sy + 34, -27, sy + 12, -13, sy + 7, 1.6, 'rgba(255,240,210,.35)');
   // arms
   if (pointing) { const ax = lean > 0 ? 1 : -1; capsule(ax * 24, sy + 18, ax * 40, sy - 26, 6, 4.5, shirt); ellG(ax * 42, sy - 31, 4.5, 4.5, 0, skin); }
   else { capsule(-27, sy + 16, -31, sy + 58, 6, 5, shirt); capsule(27, sy + 16, 31, sy + 58, 6, 5, shirt); }
@@ -1117,7 +1194,14 @@ function drawExpo() {
   const X = G.expo; G.expoT += 1 / 60; const t = G.expoT;
   ctx.fillStyle = lg(0, 0, 0, H, ['#E9DFC8', '#D8C9A8']); ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < 14; i++) { ctx.fillStyle = i % 2 ? 'rgba(120,90,50,.05)' : 'rgba(255,255,255,.05)'; ctx.fillRect(i * 70, 0, 35, 330); }
-  ctx.fillStyle = '#8A6A44'; ctx.fillRect(0, 330, W, 8); ctx.fillStyle = lg(0, 338, 0, H, ['#7A5C3A', '#5E4428']); ctx.fillRect(0, 338, W, H);
+  // wooden wainscot: planks with grain, a rail on top, warm light from the spots
+  ctx.fillStyle = lg(0, 338, 0, H, ['#86643E', '#6A4C2C', '#4E3620']); ctx.fillRect(0, 338, W, H - 338);
+  for (let x = 0; x < W; x += 48) { ctx.fillStyle = 'rgba(30,18,8,.28)'; ctx.fillRect(x, 338, 2, H - 338); ctx.fillStyle = 'rgba(255,220,170,.06)'; ctx.fillRect(x + 2, 338, 3, H - 338);
+    for (let g = 0; g < 3; g++) { const gx = x + 10 + g * 12 + hsh(x + g) * 6; ctx.strokeStyle = 'rgba(40,24,10,.12)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(gx, 342); ctx.quadraticCurveTo(gx + 3 * Math.sin(x + g), 420, gx - 1, H); ctx.stroke(); } }
+  ctx.fillStyle = '#9A7448'; ctx.fillRect(0, 328, W, 12); ctx.fillStyle = 'rgba(255,230,180,.35)'; ctx.fillRect(0, 328, W, 2); ctx.fillStyle = 'rgba(30,18,8,.35)'; ctx.fillRect(0, 340, W, 4);
+  // bunting across the top of the wall
+  { const by0 = 10; ctx.strokeStyle = '#7A5A38'; ctx.lineWidth = 1.2; ctx.beginPath(); for (let xx = 0; xx <= W; xx += 8) { const yy = by0 + Math.sin(Math.PI * (xx % 240) / 240) * 10; xx ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); } ctx.stroke();
+    for (let xx = 10, i = 0; xx < W; xx += 24, i++) { const yy = by0 + Math.sin(Math.PI * (xx % 240) / 240) * 10, sw = Math.sin(t * 2 + i) * 1.5; ctx.fillStyle = ['#D84A3A', '#F6EEDC', '#E8A33A', '#4E8A55', '#3A6E9A'][i % 5]; ctx.beginPath(); ctx.moveTo(xx - 8, yy); ctx.lineTo(xx + 8, yy); ctx.lineTo(xx + sw, yy + 16); ctx.closePath(); ctx.fill(); } }
   text('Pameran Foto Desa', W / 2, 46, 26, '#3A2A1A', 'center', 800);
   text(G.mission.name + ' · ' + regionName() + ' · Hari ' + G.maxDays, W / 2, 68, 13, '#7A5E40', 'center', 500);
   const n = X.photos.length, gap = 22, pw = n ? Math.min(150, (W - 100 - (n - 1) * gap) / n - 12) : 0, tot = n * (pw + 12) + (n - 1) * gap, x0 = (W - tot) / 2;
@@ -1137,12 +1221,30 @@ function drawExpo() {
   if (!n) text('(belum ada foto untuk dipamerkan)', W / 2, 200, 16, '#7E5E40', 'center', 500);
   // spotlights on the wall
   ctx.save(); ctx.globalCompositeOperation = 'soft-light'; for (let i = 0; i < Math.max(1, n); i++) { const cx = n ? x0 + i * (pw + 12 + gap) + (pw + 12) / 2 : W / 2; const g = ctx.createRadialGradient(cx, 170, 10, cx, 170, 150); g.addColorStop(0, 'rgba(255,240,200,.5)'); g.addColorStop(1, 'rgba(255,240,200,0)'); ctx.fillStyle = g; ctx.fillRect(cx - 150, 20, 300, 320); } ctx.restore();
+  // a back row: darker heads and shoulders between the front villagers, for a fuller crowd
+  for (let i = 0; i < 9; i++) { const bx = 100 + i * 95 + (hsh(i + 30) - .5) * 20, bb = Math.sin(t * 1.6 + i * 2) * 1, hy = 384 + (hsh(i + 40) - .5) * 14 + bb;
+    const sh = shade(VSHIRT[(i * 3 + 4) % 10], -.5), hd = 'rgba(36,24,14,.75)'; ctx.globalAlpha = .7;
+    ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(bx, hy + 44, 24, 28, 0, Math.PI, PI2); ctx.fill(); ctx.fillRect(bx - 24, hy + 44, 48, 40);
+    if (i % 4 === 2) { ctx.fillStyle = shade(['#E8D2A0', '#3A6E9A', '#D8A0B0'][i % 3], -.45); ctx.beginPath(); ctx.ellipse(bx, hy + 2, 12, 14, 0, 0, PI2); ctx.fill(); ctx.fillRect(bx - 13, hy + 2, 26, 22); }
+    else { ellG(bx, hy, 10.5, 12.5, 0, hd); if (i % 4 === 1) { ctx.fillStyle = 'rgba(120,96,56,.85)'; ctx.beginPath(); ctx.moveTo(bx - 22, hy - 5); ctx.lineTo(bx, hy - 16); ctx.lineTo(bx + 22, hy - 5); ctx.quadraticCurveTo(bx, hy - 1, bx - 22, hy - 5); ctx.fill(); } }
+    ctx.globalAlpha = 1; }
+  // who is talking right now (their head bobs while the bubble is up)
+  const SAY_P = 7, SAY_ON = 5.2, talking = {};
+  if (n) for (let k = 0; k < 3; k++) { const u = t / SAY_P + k / 3, ph = (u % 1) * SAY_P, cyc = Math.floor(u); if (ph < SAY_ON) talking[k * 3 + (cyc * 2 + k) % 3] = 1; }
   // villagers seen from behind, looking up at the photos
-  for (let i = 0; i < 10; i++) drawVillager(i, t, n ? x0 + (i % n) * (pw + 12 + gap) + (pw + 12) / 2 : W / 2);
-  // speech bubbles about the photos
-  if (n) for (let k = 0; k < 3; k++) { const ph = (t * .5 + k * 1.3) % 4; if (ph > 2.6) continue; const p = X.photos[(Math.floor(t * .5 + k * 1.3) * 7 + k) % n]; const pool = EXPO_SAY[p.impact ? 'impact' : p.kind] || EXPO_SAY.animal;
-    const say = pool[(Math.floor(t * .5 + k) + k) % pool.length], vi = (k * 3 + Math.floor(t * .5 + k * 1.3) * 2) % 10, vx = clamp(52 + vi * 95, 90, W - 90), vy = (vi === 2 || vi === 7) ? 392 : 352; font(13, 600); const tw = ctx.measureText(say).width + 22;
-    ctx.globalAlpha = Math.min(1, ph * 3, (2.6 - ph) * 3); rrect(vx - tw / 2, vy - 22, tw, 30, 14); ctx.fillStyle = '#FFFDF6'; ctx.fill(); ctx.beginPath(); ctx.moveTo(vx - 6, vy + 8); ctx.lineTo(vx + 4, vy + 8); ctx.lineTo(vx - 4, vy + 18); ctx.fill(); text(say, vx, vy - 2, 13, '#2A2A2A', 'center', 600); ctx.globalAlpha = 1; }
+  for (let i = 0; i < 10; i++) drawVillager(i, t, n ? x0 + (i % n) * (pw + 12 + gap) + (pw + 12) / 2 : W / 2, !!talking[i]);
+  // speech bubbles about the photos: one at a time per group of villagers, slow, so they can be read
+  if (n) for (let k = 0; k < 3; k++) {
+    const u = t / SAY_P + k / 3, ph = (u % 1) * SAY_P, cyc = Math.floor(u); if (ph >= SAY_ON) continue;
+    const p = X.photos[(cyc * 7 + k * 3) % n], pool = EXPO_SAY[p.impact ? 'impact' : p.kind] || EXPO_SAY.animal, say = pool[(cyc + k) % pool.length];
+    const vi = k * 3 + (cyc * 2 + k) % 3, kid = vi === 2 || vi === 7, hx = 52 + vi * 95 + (hsh(vi) - .5) * 24, vy = kid ? 392 : 348;
+    font(13.5, 600); const tw = ctx.measureText(say).width + 30, bx = clamp(hx - tw / 2, 12, W - 12 - tw);
+    const pop = clamp(ph / .35, 0, 1), sc = .7 + .3 * (1 - Math.pow(1 - pop, 3)) + Math.sin(pop * Math.PI) * .06, a = Math.min(1, ph / .3, (SAY_ON - ph) / .7);
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(hx, vy + 16); ctx.scale(sc, sc); ctx.translate(-hx, -(vy + 16));
+    ctx.fillStyle = 'rgba(40,24,10,.22)'; rrect(bx + 2, vy - 22, tw, 32, 16); ctx.fill();
+    rrect(bx, vy - 25, tw, 32, 16); ctx.fillStyle = '#FFFDF6'; ctx.fill(); ctx.beginPath(); ctx.moveTo(hx - 7, vy + 6); ctx.lineTo(hx + 5, vy + 6); ctx.lineTo(hx - 3, vy + 17); ctx.closePath(); ctx.fill();
+    ellG(bx + 14, vy - 9, 4, 4, 0, VSHIRT[vi]); text(say, bx + 24, vy - 4, 13.5, '#2A2A2A', 'left', 600);
+    ctx.restore(); }
   // stage 0: look at the photos; the player moves on with a button. Stage 1: the ending.
   const allIn = t > n * .35 + .8;
   if (G.expoStage === 0) {
@@ -1556,16 +1658,25 @@ function bigTree(x, base, by, kind, sc, R) {
   if (kind === 'pedada') { for (let i = 0; i < 12; i++) { const fx = x - 140 * sc + i * 25 * sc + (R() - .5) * 8, fy = by - 12 - R() * 30; curve(fx, fy - 18, fx + 2, fy - 8, fx, fy, 1, '#55703A'); ell(fx, fy + 3, 4.6, 4, '#7FA34C'); ell(fx - 1.4, fy + 1.6, 1.6, 1.3, 'rgba(255,255,220,.5)'); } }
   if (kind !== 'mangrove') for (let i = 0; i < 3; i++) liana(x - 90 * sc + i * 70 * sc + (R() - .5) * 20, by - 20, 50 + R() * 40, R);
 }
+// Bark across a tree: lit on the left of the trunk, shaded on the right, mid tone out along the limbs.
+// The same gradient fills the trunk, the limbs and (in the crown sprite) the crown's own branches, so they join without a seam.
+function barkGrad(cx, span, tw0, BK) {
+  const G = ctx.createLinearGradient(cx - span, 0, cx + span, 0), e = tw0 * 1.6 / (2 * span);
+  G.addColorStop(0, shade(BK[1], .04)); G.addColorStop(Math.max(.01, .5 - e * 2.2), BK[1]); G.addColorStop(.5 - e, BK[0]); G.addColorStop(.5, BK[1]); G.addColorStop(.5 + e, BK[2]); G.addColorStop(Math.min(.99, .5 + e * 2.2), BK[1]); G.addColorStop(1, shade(BK[1], -.06));
+  return G;
+}
 function drawLimbs(L, ci, R) {
   const c = L.canopy[ci], sc = c.sc, span = 130 * sc, P = limbP(c), BK = (SPP[c.sp] && SPP[c.sp].bark) || ['#7C6148', '#5E4733', '#4A3726'], bark = BK[2];
   // Trunk and both limbs are filled as ONE shape with the trunk's own gradient, so there is no seam at the fork.
   const sh = (SPP[c.sp] && SPP[c.sp].shape) || c.sp, tw0 = (sh === 'meranti' ? 8 : sh === 'apiapi' ? 7 : 9) * sc;
   const tTop = c.y - 30 * sc - (sh === 'meranti' ? 58 * sc : 0), tBase = L.base;
   const halfW = y => { const t = clamp((y - tBase) / (tTop - tBase), 0, 1); return ((1 - t) * (1 - t) * 1.75 + 2 * (1 - t) * t * .9 + t * t * .6) * tw0; };
-  const G = ctx.createLinearGradient(c.x - span, 0, c.x + span, 0); { const e = tw0 * 1.6 / (2 * span); G.addColorStop(0, shade(BK[1], .04)); G.addColorStop(Math.max(.01, .5 - e * 2.2), BK[1]); G.addColorStop(.5 - e, BK[0]); G.addColorStop(.5, BK[1]); G.addColorStop(.5 + e, BK[2]); G.addColorStop(Math.min(.99, .5 + e * 2.2), BK[1]); G.addColorStop(1, shade(BK[1], -.06)); }
+  const G = barkGrad(c.x, span, tw0, BK);
   // trunk keeps rising above the fork into the crown, with two support limbs (hidden by leaves higher up)
-  const lean = (R() - .5) * 14 * sc; growBranch(c.x, c.y + 30 * sc, -Math.PI / 2 + lean / 120, 120 * sc, Math.max(14 * sc * P.th, tw0 * 1.4), 0, R, G, [], 0);
-  for (const sd of [-1, 1]) { const tw = []; growBranch(c.x + lean * .3, c.y - 14 * sc, -Math.PI / 2 + sd * (.55 + R() * .25), (60 + R() * 20) * sc, 5.5 * sc * P.th, 1, R, BK[1], tw, .01); }
+  const lean = (R() - .5) * 14 * sc, wU = Math.max(14 * sc * P.th, tw0 * 1.4); growBranch(c.x, c.y + 30 * sc, -Math.PI / 2 + lean / 120, 120 * sc, wU, 0, R, G, [], 0);
+  const crotch = () => { for (const sd of [-1, 1]) { const h = 54 * sc, tx = c.x + lean * h / 120 + sd * wU * .44, ty = c.y + 30 * sc - h, d1 = .26, lx = c.x + sd * span * d1, ly = limbY(c, d1) + .8;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y + 24 * sc); ctx.lineTo(tx - sd * 2, ty); ctx.quadraticCurveTo(c.x + sd * wU * .5, limbY(c, .07) - 2 * sc, lx, ly); ctx.lineTo(lx, ly + 6 * sc); ctx.closePath(); ctx.fillStyle = G; ctx.fill(); } };
+  for (const sd of [-1, 1]) { const tw = []; growBranch(c.x + lean * .3, c.y - 14 * sc, -Math.PI / 2 + sd * (.55 + R() * .25), (60 + R() * 20) * sc, 5.5 * sc * P.th, 1, R, G, tw, .01); }
   const N = 24, K0 = 7, S = {};
   for (const side of [-1, 1]) {
     const knots = [[.3 + R() * .15, (2 + R() * 2) * sc], [.6 + R() * .25, (1.5 + R() * 2) * sc]];
@@ -1573,20 +1684,42 @@ function drawLimbs(L, ci, R) {
     for (let k = 0; k <= N; k++) {
       const d = k / N, x = c.x + side * span * d, y = limbY(c, d);
       let th = (15 - 10 * d) * sc * P.th + Math.sin(d * 9 + side) * .9 * sc; for (const kn of knots) th += kn[1] * Math.exp(-Math.pow((d - kn[0]) / .05, 2));
+      if (d > .8) th *= lerp(1, .3, (d - .8) / .2); // taper to the tip
       top.push([x, y]); bot.push([x, y + th]);
     }
     S[side] = { top, bot };
   }
   const yJ = c.y + 64 * sc, hJ = halfW(yJ), KL = 5 + Math.floor(R() * 4), KR = 5 + Math.floor(R() * 4), tL = .5 + R() * .3, tR = .5 + R() * .3;
-  ctx.fillStyle = G; ctx.beginPath(); ctx.moveTo(c.x - hJ, yJ + 3);
+  const full = sh !== 'beringin', TS = 16; // full: the trunk below the fork is part of the same shape, so there is no seam
+  ctx.fillStyle = G; ctx.beginPath();
+  if (full) { for (let k = 0; k <= TS; k++) { const y = lerp(tBase + 1, yJ + 3, k / TS); ctx[k ? 'lineTo' : 'moveTo'](c.x - halfW(y) - .6, y); } }
+  else ctx.moveTo(c.x - hJ, yJ + 3);
   { const T = S[-1], b = T.bot[KL]; ctx.bezierCurveTo(c.x - hJ * 1.02, yJ - (yJ - b[1]) * tL, b[0] + span * (.06 + R() * .08), b[1] + (2 + R() * 4) * sc, b[0], b[1]);
     for (let k = KL + 1; k <= N; k++) ctx.lineTo(T.bot[k][0], T.bot[k][1]); for (let k = N; k >= 0; k--) ctx.lineTo(T.top[k][0], T.top[k][1]); }
   { const T = S[1]; for (let k = 0; k <= N; k++) ctx.lineTo(T.top[k][0], T.top[k][1]); for (let k = N; k >= KR; k--) ctx.lineTo(T.bot[k][0], T.bot[k][1]);
-    const b = T.bot[KR]; ctx.bezierCurveTo(b[0] - span * (.06 + R() * .08), b[1] + (2 + R() * 4) * sc, c.x + hJ * 1.02, yJ - (yJ - b[1]) * tR, c.x + hJ, yJ + 3); }
-  ctx.closePath(); ctx.fill();
+    const b = T.bot[KR]; ctx.bezierCurveTo(b[0] - span * (.06 + R() * .08), b[1] + (2 + R() * 4) * sc, c.x + hJ * 1.02, yJ - (yJ - b[1]) * tR, c.x + (full ? halfW(yJ + 3) + .6 : hJ), yJ + 3); }
+  if (full) for (let k = TS; k >= 0; k--) { const y = lerp(tBase + 1, yJ + 3, k / TS); ctx.lineTo(c.x + halfW(y) + .6, y); }
+  ctx.closePath(); ctx.fill(); crotch();
+  if (full) {
+    // buttress fins (meranti, ketapang) and root flares, filled with the trunk's gradient so they grow out of it
+    const bw = sh === 'meranti' ? 11 * sc : sh === 'ketapang' ? 6 * sc : 0;
+    if (bw) for (const s2 of [-1, 1]) { ctx.fillStyle = G; ctx.beginPath(); ctx.moveTo(c.x + s2 * halfW(tBase - 52) * .9, tBase - 52); ctx.quadraticCurveTo(c.x + s2 * bw * 1.5, tBase - 14, c.x + s2 * bw * 3.2, tBase + 1); ctx.lineTo(c.x + s2 * halfW(tBase) * .6, tBase + 1); ctx.closePath(); ctx.fill();
+      if (s2 > 0) { ctx.fillStyle = 'rgba(25,16,10,.16)'; ctx.fill(); } curve(c.x + s2 * halfW(tBase - 48) * .95, tBase - 48, c.x + s2 * bw * 1.6, tBase - 12, c.x + s2 * bw * 3, tBase, .9, 'rgba(255,230,190,.16)'); }
+    if (sh !== 'bakau' && sh !== 'apiapi') for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { const ex = c.x + sd * (16 + k * 13 + R() * 6) * sc, ey = tBase + 3 + k * 2.5, sx = c.x + sd * halfW(tBase - 26 * sc + k * 6) * .85;
+      ctx.fillStyle = G; ctx.beginPath(); ctx.moveTo(sx, tBase - 26 * sc + k * 6); ctx.quadraticCurveTo(c.x + sd * (10 + k * 6) * sc, tBase - 6, ex, ey); ctx.quadraticCurveTo(c.x + sd * (6 + k * 6) * sc, tBase, c.x + sd * (1 + k) * sc, tBase - 4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(25,16,10,' + (.06 + k * .05) + ')'; ctx.fill(); curve(sx, tBase - 22 * sc + k * 6, c.x + sd * (10 + k * 6) * sc, tBase - 8, ex - sd * 2, ey - 2, .9, 'rgba(255,230,190,.14)'); }
+  }
+  if (full) {
+    // bark streaks run up the whole trunk and fade out as they reach the fork; a soft light down the left side
+    const yF = c.y + 26 * sc;
+    for (let i = -2; i <= 2; i++) { const g = ctx.createLinearGradient(0, tBase, 0, yF); g.addColorStop(0, 'rgba(25,16,10,.26)'); g.addColorStop(.6, 'rgba(25,16,10,.2)'); g.addColorStop(1, 'rgba(25,16,10,0)');
+      ctx.strokeStyle = g; ctx.lineWidth = 1.1; ctx.beginPath(); for (let k = 0; k <= 12; k++) { const y = lerp(tBase - 4, yF, k / 12), x = c.x + i * halfW(y) * .3 + Math.sin(y * .05 + i) * .8; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
+    { const g = ctx.createLinearGradient(0, tBase, 0, yF); g.addColorStop(0, 'rgba(255,235,200,.2)'); g.addColorStop(1, 'rgba(255,235,200,0)'); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.beginPath();
+      for (let k = 0; k <= 12; k++) { const y = lerp(tBase - 2, yF, k / 12), x = c.x - halfW(y) * .62; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
+  }
   // soft shade under the fork and a few short trunk streaks that fade out below it
-  { const g = ctx.createRadialGradient(c.x, c.y + 22 * sc, 2, c.x, c.y + 22 * sc, 30 * sc); g.addColorStop(0, 'rgba(25,16,10,.22)'); g.addColorStop(1, 'rgba(25,16,10,0)'); ctx.fillStyle = g; ctx.fillRect(c.x - 34 * sc, c.y + 12 * sc, 68 * sc, 50 * sc); }
-  for (let i = -2; i <= 2; i++) { const x0 = c.x + i * hJ * .3; const g = ctx.createLinearGradient(0, yJ + 14, 0, c.y + 30 * sc); g.addColorStop(0, 'rgba(25,16,10,.25)'); g.addColorStop(1, 'rgba(25,16,10,0)'); ctx.strokeStyle = g; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(x0, yJ + 14); ctx.quadraticCurveTo(x0 + i * 1.5, (yJ + c.y + 30 * sc) / 2, x0 + i * 3 * sc, c.y + 30 * sc); ctx.stroke(); }
+  { ctx.save(); ctx.translate(c.x, c.y + 26 * sc); ctx.scale(hJ * .9, 24 * sc); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); g.addColorStop(0, 'rgba(25,16,10,.2)'); g.addColorStop(1, 'rgba(25,16,10,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 1, 0, PI2); ctx.fill(); ctx.restore(); }
+  if (!full) for (let i = -2; i <= 2; i++) { const x0 = c.x + i * hJ * .3; const g = ctx.createLinearGradient(0, yJ + 14, 0, c.y + 30 * sc); g.addColorStop(0, 'rgba(25,16,10,.25)'); g.addColorStop(1, 'rgba(25,16,10,0)'); ctx.strokeStyle = g; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(x0, yJ + 14); ctx.quadraticCurveTo(x0 + i * 1.5, (yJ + c.y + 30 * sc) / 2, x0 + i * 3 * sc, c.y + 30 * sc); ctx.stroke(); }
   for (const side of [-1, 1]) {
     const { top, bot } = S[side];
     // underside shadow, top light, bark streaks
@@ -1597,18 +1730,9 @@ function drawLimbs(L, ci, R) {
       ctx.beginPath(); for (let k = k0; k <= k1; k++) { const yy = lerp(top[k][1], bot[k][1], f); k === k0 ? ctx.moveTo(top[k][0], yy) : ctx.lineTo(top[k][0], yy); } ctx.stroke(); }
     // broken stub
     { const d = .45 + R() * .2, k = Math.round(d * N), x = top[k][0], y = top[k][1]; taperLimb(x, y + 2, x - side * 4 * sc, y - 9 * sc, 0, 4 * sc, 3 * sc, BK[1]); ell(x - side * 4 * sc, y - 9 * sc, 1.6 * sc, 1.2 * sc, '#A88C6C'); }
-    for (let q = 0; q < P.tw; q++) { const d = .22 + (q + .3 + R() * .4) / P.tw * .7; const x = c.x + side * span * d, y = limbY(c, d); const tw = []; growBranch(x, y + 2, side > 0 ? -.8 - R() * .3 : Math.PI + .8 + R() * .3, (30 + R() * 16) * sc, 4 * sc, 1, R, bark, tw, .03); for (const tp of tw) leafBlob(tp[0], tp[1] - 3, (9 + R() * 4) * sc, ['#2C5A35', '#437A49', '#8CBB72'], R); }
+    for (let q = 0; q < P.tw; q++) { const d = .22 + (q + .3 + R() * .4) / P.tw * .7; const x = c.x + side * span * d, y = limbY(c, d); const tw = []; growBranch(x, y + 2, side > 0 ? -.8 - R() * .3 : Math.PI + .8 + R() * .3, (30 + R() * 16) * sc, 4 * sc, 1, R, BK[1], tw, .03); for (const tp of tw) leafBlob(tp[0], tp[1] - 3, (9 + R() * 4) * sc, ['#2C5A35', '#437A49', '#8CBB72'], R); }
     for (const d of [.58, .93]) { const x = c.x + side * span * d, y = limbY(c, d) + 6 * sc; curve(x, y, x + side * 6, y + 8, x + side * 4, y + 16, 1.6, '#5A4330'); ell(x + side * 4, y + 18, 4, 2.4, '#4F8A4A', side * .6); }
   }
-}
-function entryBranches(L, R) {
-  const C = L.canopy, A = C[0], B = C[C.length - 1], LWd = L.width || W; const sa = 130 * A.sc, sb = 130 * B.sc;
-  const draw = (x0, x1) => { const n = 18, top = [], bot = []; for (let k = 0; k <= n; k++) { const x = lerp(x0, x1, k / n), y = branchY(L, x), th = 7 - 3 * Math.abs(k / n - .5); top.push([x, y]); bot.push([x, y + th]); }
-    ctx.fillStyle = lg(0, top[0][1] - 4, 0, top[0][1] + 10, ['#7C6148', '#4E3A2A', '#3A2A1D']); ctx.beginPath(); top.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); for (let k = n; k >= 0; k--) ctx.lineTo(bot[k][0], bot[k][1]); ctx.closePath(); ctx.fill();
-    for (let k = 1; k < 4; k++) { const x = lerp(x0, x1, k / 4), y = branchY(L, x); curve(x, y + 1, x + 8, y - 12, x + 4, y - 22, 2, '#4E3A2A'); } };
-  draw(-20, A.x - sa + 4); draw(B.x + sb - 4, LWd + 20);
-  const pal = ['#2C5A35', '#437A49', '#8CBB72'];
-  for (let i = 0; i < 4; i++) { const xa = -10 + i * 34, xb = LWd + 10 - i * 34; leafBlob(xa, branchY(L, Math.max(0, xa)) - 16 - (i % 2) * 8, 16, pal, R); leafBlob(xb, branchY(L, Math.min(LWd, xb)) - 16 - (i % 2) * 8, 16, pal, R); }
 }
 function tuft(x, y, h, col, R) { ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.lineCap = 'round'; for (let i = 0; i < 6; i++) { const a = (R() - .5) * 1.1; ctx.beginPath(); ctx.moveTo(x + (R() - .5) * 6, y); ctx.quadraticCurveTo(x + a * h * .5, y - h * .6, x + a * h, y - h * (0.7 + R() * .4)); ctx.stroke(); } }
 function frond(x, y, len, ang, col, colD, R) {
@@ -1702,7 +1826,7 @@ function dropRoot(x0, y0, x1, y1, w, col, R) {
 function crownCauli(w, h, pal, R, lift) {
   const g = []; const base = -lift - 6;
   const tips = [[-w * .36, base - h * .45], [-w * .14, base - h * .78], [w * .12, base - h * .82], [w * .36, base - h * .5], [0, base - h * .52]];
-  taperLimb(0, base + 14, 0, base - 10, 0, 10, 8, '#5E4B3A'); for (const tp of tips) branchTo((R() - .5) * 6, base - 6, tp[0], tp[1] + 14, 8, 1, R, '#5E4B3A');
+  taperLimb(0, base + 14, 0, base - 10, 0, 10, 8, CB || '#5E4B3A'); for (const tp of tips) branchTo((R() - .5) * 6, base - 6, tp[0], tp[1] + 14, 8, 1, R, CB || '#5E4B3A');
   for (const tp of tips) {
     const cw = w * (.15 + R() * .05), ch = h * (.2 + R() * .06);
     for (let i = 0; i < 6; i++) { const cx = tp[0] + (R() - .5) * cw * 1.5, cy = tp[1] - R() * ch * .9; const r = ch * (.55 + R() * .35); leafBlob(cx, cy, r, pal, R); if (i % 2) g.push([cx - r * .2, cy - r * .3]); }
@@ -1711,7 +1835,7 @@ function crownCauli(w, h, pal, R, lift) {
   return g;
 }
 function crownBeringin(w, h, pal, R) {
-  const g = []; limbs(7, w * .8, h * .8, '#3E3024', R);
+  const g = []; limbs(7, w * .8, h * .8, CB || '#3E3024', R);
   fine(0, -h * .5, w * .52, h * .44, pal, R, 420, 6);
   for (let i = 0; i < 6; i++) { const t = i / 5, cx = -w * .42 + t * w * .84, cy = -h * (.62 + Math.sin(Math.PI * t) * .28); fine(cx, cy, w * .14, h * .2, pal, R, 70, 5.5); g.push([cx - 8, cy - 10]); }
   for (let i = 0; i < 46; i++) { const x = -w * .5 + R() * w, y = -h * .14 + Math.abs(x) / w * -h * .4; const len = 8 + R() * 16; for (let k = 0; k < 4; k++) ell(x + (R() - .5) * 2, y + len * k / 4, 2.6, 3.4, k % 2 ? pal[0] : pal[1]); }
@@ -1721,7 +1845,7 @@ function crownBeringin(w, h, pal, R) {
 function crownKetapang(w, h, pal, R) {
   // Terminalia catappa: one leader with uneven tiers of near-horizontal limbs that fork and curl up at the tips;
   // leaves cluster in rosettes at the twig ends.
-  const g = [], tips = [], red = ['#A9542F', '#B8693A', '#8E4A2A'], bark = '#5E4B3A'; const tiers = 4;
+  const g = [], tips = [], red = ['#A9542F', '#B8693A', '#8E4A2A'], bark = CB || '#5E4B3A'; const tiers = 4;
   const top = -h * 1.02, lean = (R() - .5) * 16;
   taperLimb(0, 14, lean, top, (R() - .5) * 18, 8, 2, bark);
   for (let k = 0; k < tiers; k++) {
@@ -1744,7 +1868,7 @@ function crownKetapang(w, h, pal, R) {
   return g;
 }
 function crownPedada(w, h, pal, R) {
-  const g = []; const tips = spreadCrown(w, h, 5, 6, '#5E4E3E', R, -8).filter(tp => tp[1] < -h * .15);
+  const g = []; const tips = spreadCrown(w, h, 5, 6, CB || '#5E4E3E', R, -8).filter(tp => tp[1] < -h * .15);
   for (const tp of tips) { fine(tp[0], tp[1], w * (.09 + R() * .04), h * (.15 + R() * .05), pal, R, 60, 5); g.push([tp[0] - 6, tp[1] - 8]); }
   for (let i = 0; i < 34; i++) {
     const tp = tips[Math.floor(R() * tips.length)]; const x = tp[0] + (R() - .5) * w * .18, y = tp[1] + 4, len = 22 + R() * 40;
@@ -1755,7 +1879,7 @@ function crownPedada(w, h, pal, R) {
   return g;
 }
 function crownBakau(w, h, pal, R) {
-  const g = []; limbs(5, w * .7, h * .7, '#4E3224', R);
+  const g = []; limbs(5, w * .7, h * .7, CB || '#4E3224', R);
   ell(0, -h * .5, w * .42, h * .4, pal[0]);
   const pts = [];
   for (let i = 0; i < 70; i++) { const a = R() * PI2, d = Math.pow(R(), .6); const x = Math.cos(a) * d * w * .46, y = -h * .5 + Math.sin(a) * d * h * .44; if (y > -h * .06) continue; pts.push([x, y]); }
@@ -1765,7 +1889,7 @@ function crownBakau(w, h, pal, R) {
   return g;
 }
 function crownApiapi(w, h, pal, R) {
-  const g = []; const tips = spreadCrown(w * 1.1, h, 5, 6, '#9C9688', R, -4);
+  const g = []; const tips = spreadCrown(w * 1.1, h, 5, 6, CB || '#9C9688', R, -4);
   for (const tp of tips) { const rx = w * (.07 + R() * .05), ry = h * (.12 + R() * .06); fine(tp[0], tp[1], rx, ry, pal, R, 70, 4.6); g.push([tp[0] - rx * .3, tp[1] - ry * .4]); }
   return g;
 }
@@ -1780,6 +1904,7 @@ function crownNipah(sc, pal, R) {
   for (let i = 0; i < 11; i++) { const a = -2.35 + (i / 10) * 1.6 + (R() - .5) * .12; const len = (90 + R() * 50) * sc; ctx.save(); ctx.rotate(a); frond(0, 0, len, 0, i % 2 ? pal[1] : pal[2], pal[0], R); ctx.restore(); g.push([Math.cos(a) * len * .6, Math.sin(a) * len * .6]); }
   return g;
 }
+let CB = null;
 function buildTree(T, R) {
   const { x, base, by, sc, main } = T; const spec = SPP[T.sp]; const sp = spec.shape || T.sp; const pal = jitterPal(spec.pal, R); const bark = spec.bark || SPP[sp].bark;
   let lift = 0, w = 280 * sc, h = 120 * sc;
@@ -1792,12 +1917,12 @@ function buildTree(T, R) {
     if (sp === 'apiapi') { const mid = (base + by) / 2, pa = jitterPal(SPP.apiapi.pal, R); for (const sd of [-1, 1]) { const tp = []; growBranch(x + sd * 5 * sc, base - 8 - R() * 10, sd > 0 ? -.55 - R() * .15 : Math.PI + .55 + R() * .15, (base - mid) * .75 + 20 * sc, 6.5 * sc, 1, R, bark[1], tp, .02); for (const q of tp) fine(q[0], q[1] - 6, 20 * sc, 13 * sc, pa, R, 40, 4.4); } }
     if (sp === 'meranti') lift = 58 * sc;
     trunkC(x, base, by - 30 * sc - lift, (sp === 'meranti' ? 8 : sp === 'apiapi' ? 7 : 9) * sc, bark);
-    if (sp === 'meranti') buttress(x, base, 11 * sc); else if (sp === 'ketapang') buttress(x, base, 6 * sc);
+    if (!(main && sp !== 'beringin')) { if (sp === 'meranti') buttress(x, base, 11 * sc); else if (sp === 'ketapang') buttress(x, base, 6 * sc); } // main trees: drawn with the trunk in drawLimbs
     if (sp === 'apiapi') pneumato(x - 70 * sc, x + 70 * sc, base - 2, R, '#6E6656');
   }
   if (main) {
     ellG(x, base - 1, 44 * sc, 4.5 * sc, 0, 'rgba(20,14,8,.18)');
-    if (sp !== 'bakau' && sp !== 'apiapi') for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { const ex = x + sd * (16 + k * 13 + R() * 6) * sc, ey = base + 3 + k * 2.5;
+    if (sp === 'beringin') for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { const ex = x + sd * (16 + k * 13 + R() * 6) * sc, ey = base + 3 + k * 2.5;
       const g = lg(0, base - 24, 0, ey, [bark[1], bark[2]]); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x + sd * (3 + k * 2) * sc, base - 26 * sc + k * 6);
       ctx.quadraticCurveTo(x + sd * (10 + k * 6) * sc, base - 6, ex, ey); ctx.quadraticCurveTo(x + sd * (6 + k * 6) * sc, base, x + sd * (1 + k) * sc, base - 4); ctx.closePath(); ctx.fill();
       curve(x + sd * (4 + k * 2) * sc, base - 22 * sc + k * 6, x + sd * (10 + k * 6) * sc, base - 8, ex - sd * 2, ey - 2, .9, 'rgba(255,230,190,.18)'); }
@@ -1808,6 +1933,8 @@ function buildTree(T, R) {
   let glints = [];
   const cv2 = mkLayer(SW, SH, () => {
     ctx.translate(ox, oy);
+    // crown branches in the trunk's bark: main trees get the very same gradient as their trunk and limbs
+    CB = !bark ? null : main ? barkGrad(0, 130 * sc, (sp === 'meranti' ? 8 : sp === 'apiapi' ? 7 : 9) * sc, bark) : bark[1];
     if (sp === 'meranti') glints = crownCauli(w * 1.05, h * 1.1, pal, R, lift);
     else if (sp === 'beringin') glints = crownBeringin(w * 1.25, h * 1.05, pal, R);
     else if (sp === 'ketapang') glints = crownKetapang(w * .95, h * 1.1, pal, R);
@@ -1817,19 +1944,24 @@ function buildTree(T, R) {
     else if (sp === 'kelapa') glints = crownKelapa(sc, pal, R);
     else if (sp === 'nipah') glints = crownNipah(sc, pal, R);
     if (main) for (const s of [-1, 1]) leafBlob(s * 126 * sc, -16, 16 * sc, pal, R);
-  });
+  }); CB = null;
   const hangers = [];
   if (sp === 'beringin') for (let i = 0; i < 12; i++) hangers.push({ x: (R() - .5) * w * 1.05, y: -16 - R() * 20, len: 50 + R() * 70, col: '#5E4A36', w: 1.3, ph: R() * 6 });
-  if (sp === 'meranti' || sp === 'ketapang' || sp === 'pedada') for (let i = 0; i < 3; i++) hangers.push({ x: -90 * sc + i * 70 * sc + (R() - .5) * 20, y: -20, len: 50 + R() * 40, col: '#4A5E36', w: 1.6, ph: R() * 6, leaf: true });
+  if (sp === 'meranti' || sp === 'ketapang' || sp === 'pedada') for (let i = 0; i < 3; i++) {
+    if (main && T.L) { const cc = T.L.canopy[T.ci], P = limbP(cc), side = i === 2 ? (R() < .5 ? -1 : 1) : (i ? 1 : -1), d = .34 + R() * .5;
+      hangers.push({ x: side * 130 * cc.sc * d, y: limbY(cc, d) - cc.y + (15 - 10 * d) * cc.sc * P.th * .5, len: 45 + R() * 40, col: '#4A5E36', w: 1.6, ph: R() * 6, leaf: true }); }
+    else hangers.push({ x: -90 * sc + i * 70 * sc + (R() - .5) * 20, y: -20, len: 50 + R() * 40, col: '#4A5E36', w: 1.6, ph: R() * 6, leaf: true }); }
   return { c: cv2, x: x + (T.lean || 0) * 0, ax: x + (T.lean || 0), ay: by, ox, oy, SW, SH, ph: R() * 6, amp: (sp === 'kelapa' || sp === 'nipah' ? .03 : main ? .011 : .018) * (sc < .7 ? 1.3 : 1), glints, hangers, pal };
 }
 function gustAt(t) { return Math.pow(Math.max(0, Math.sin(t * 0.21 + 1)), 6); }
-function swayOf(cr, t) { return Math.sin(t * 0.32 + cr.ph) * cr.amp * .8 + gustAt(t) * Math.sin(t * 1.05 + cr.ph) * cr.amp * 2; }
+let SWAY_K = 1; // the menu turns this up so the trees move more
+function swayOf(cr, t) { return (Math.sin(t * 0.32 + cr.ph) * cr.amp * .8 + gustAt(t) * Math.sin(t * 1.05 + cr.ph) * cr.amp * 2 + Math.sin(t * 0.9 + cr.ph * 2) * cr.amp * .35 * (SWAY_K - 1)) * SWAY_K; }
 function drawCrowns(crowns, t) {
   for (const cr of crowns) {
     const a = swayOf(cr, t);
-    ctx.save(); ctx.translate(cr.ax, cr.ay + 12); ctx.rotate(a); ctx.translate(0, -12);
+    ctx.save(); ctx.translate(cr.ax, cr.ay);
     for (const hg of cr.hangers) { const sw = Math.sin(t * 0.5 + hg.ph) * 3 + a * 260; ctx.strokeStyle = hg.col; ctx.lineWidth = hg.w; ctx.beginPath(); ctx.moveTo(hg.x, hg.y); ctx.quadraticCurveTo(hg.x + sw * .5, hg.y + hg.len * .6, hg.x + sw, hg.y + hg.len); ctx.stroke(); if (hg.leaf) for (let k = 0; k < 4; k++) { const q = (k + 1) / 5; ell(hg.x + sw * q * q, hg.y + hg.len * q, 3.2, 1.8, '#5D7E43', k + sw * .05); } }
+    ctx.restore(); ctx.save(); ctx.translate(cr.ax, cr.ay + 12); ctx.rotate(a); ctx.translate(0, -12);
     ctx.drawImage(cr.c, -cr.ox, -cr.oy, cr.SW, cr.SH);
     for (let i = 0; i < cr.glints.length; i++) { const gp = cr.glints[i]; const f = Math.sin(t * (0.7 + (i % 3) * .3) + i * 1.7 + cr.ph); if (f < .55) continue; ell(gp[0], gp[1], 3.4, 1.7, 'rgba(235,250,210,' + ((f - .55) * 1.4) + ')', i); }
     ctx.restore();
@@ -1911,9 +2043,12 @@ function buildForest(L, R) {
   // aerial perspective: background trees take the sky's haze and a slight blur
   const hz = hazeFor(L); tint(bgBase, hz, .4); bgBase = blurred(bgBase, .6);
   for (const cr of bgCrowns) { tint(cr.c, hz, .4); cr.c = blurred(cr.c, .6); cr.hangers = []; }
-  const mainBase = mkLayer(LWd, H, () => { L.canopy.forEach((c, i) => mainCrowns.push(buildTree({ x: c.x, base: L.base, by: c.y, sp: spec.main[i][0], sc: spec.main[i][1], main: true, L, ci: i }, R))); entryBranches(L, R); });
+  const mainBase = mkLayer(LWd, H, () => { L.canopy.forEach((c, i) => mainCrowns.push(buildTree({ x: c.x, base: L.base, by: c.y, sp: spec.main[i][0], sc: spec.main[i][1], main: true, L, ci: i }, R))); });
   const full = mkLayer(LWd, H, () => { ctx.drawImage(bgBase, 0, 0, LWd, H); drawCrowns(bgCrowns, 0); ctx.drawImage(mainBase, 0, 0, LWd, H); drawCrowns(mainCrowns, 0); });
-  return { bgBase, mainBase, full, bgCrowns, mainCrowns };
+  // where the trees cover the sky (1/6 scale alpha), so sun rays can dim when the sun is behind leaves
+  const occ = (() => { const k = 6, ow = Math.ceil(LWd / k), oh = Math.ceil(320 / k), c = document.createElement('canvas'); c.width = ow; c.height = oh; const g = c.getContext('2d');
+    g.drawImage(full, 0, 0, full.width, 320 * S, 0, 0, ow, oh); const d = g.getImageData(0, 0, ow, oh).data, a = new Uint8Array(ow * oh); for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3]; return { k, w: ow, h: oh, a }; })();
+  return { bgBase, mainBase, full, bgCrowns, mainCrowns, occ };
 }
 // Extra clouds / streaks / boats along a panorama's sky (the spot's own ones stay at the start end).
 function extraSky(kind, fo, R) {
@@ -1975,6 +2110,78 @@ function envDetail(L, R, w) {
     for (let i = 0; i < w / 16; i++) { const x = R() * w, y = 380 + R() * 140; ell(x, y, 2 + R() * 1.6, 1.4 + R(), ['#F2E6D2', '#E8CDB0', '#D9B6A0'][Math.floor(R() * 3)], R() * 3); }
     for (let x = 60; x < w; x += 260 + R() * 260) { const y = 400 + R() * 90, l = 30 + R() * 30, a = (R() - .5) * .5; ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.fillStyle = '#8A7A66'; ctx.fillRect(-l / 2, -2.5, l, 5); ctx.fillStyle = 'rgba(255,240,220,.3)'; ctx.fillRect(-l / 2, -2.5, l, 1.5); ctx.restore(); }
     for (let i = 0; i < w / 40; i++) { const x = R() * w, y = 372 + R() * 20; tuft(x, y, 7 + R() * 6, '#8FA25A', R); }
+  }
+}
+// Plants and small things big enough to read at a glance, so the ground and water are not plain.
+function keladi(x, y, s, R) { // taro: a few big heart leaves on stalks
+  const n = 3 + Math.floor(R() * 3);
+  for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + (i - (n - 1) / 2) * .42 + (R() - .5) * .2, L = (16 + R() * 12) * s, tx = x + Math.cos(a) * L, ty = y + Math.sin(a) * L;
+    curve(x, y, x + Math.cos(a) * L * .4, y - L * .55, tx, ty, 1.6 * s, '#4E7A38');
+    const col = ['#3E7A44', '#4A8A4C', '#2F6A3C'][i % 3]; ctx.save(); ctx.translate(tx, ty); ctx.rotate(a + Math.PI / 2 + (R() - .5) * .5); const w = (9 + R() * 4) * s, h = w * 1.25;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-w * 1.1, -h * .1, -w * .8, h * .9, 0, h); ctx.bezierCurveTo(w * .8, h * .9, w * 1.1, -h * .1, 0, 0); ctx.fill();
+    ctx.fillStyle = shade(col, .12); ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-w * 1.1, -h * .1, -w * .8, h * .9, 0, h); ctx.closePath(); ctx.fill();
+    seg(0, h * .05, 0, h * .9, shade(col, .3), .8); ctx.restore(); }
+}
+function pandan(x, y, s, R) { // sword-leaved clump arching out
+  for (let i = 0; i < 9; i++) { const a = -Math.PI / 2 + (i / 8 - .5) * 2.2 + (R() - .5) * .2, L = (18 + R() * 16) * s, ex = x + Math.cos(a) * L, ey = y + Math.sin(a) * L * .8 + L * .25 * Math.abs(Math.cos(a));
+    const col = i % 3 ? '#4E7E3A' : '#6E9A4A', mx = x + Math.cos(a) * L * .5, my = y + Math.sin(a) * L * .75;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x - 1.6 * s, y); ctx.quadraticCurveTo(mx - 1.2 * s, my, ex, ey); ctx.quadraticCurveTo(mx + 1.2 * s, my, x + 1.6 * s, y); ctx.fill(); }
+}
+function senduduk(x, y, s, R) { // Melastoma: a low shrub with pink flowers
+  for (let i = 0; i < 4; i++) leafBlob(x + (i - 1.5) * 7 * s, y - (6 + R() * 6) * s, (7 + R() * 3) * s, ['#3E6A34', '#4E7E3E', '#7EA858'], R);
+  for (let i = 0; i < 6; i++) { const fx = x + (R() - .5) * 30 * s, fy = y - (8 + R() * 12) * s; for (let k = 0; k < 5; k++) { const a = k / 5 * PI2; ellG(fx + Math.cos(a) * 2.4 * s, fy + Math.sin(a) * 2.4 * s, 1.9 * s, 1.9 * s, 0, '#D86AAE'); } ellG(fx, fy, 1.1 * s, 1.1 * s, 0, '#F4D24A'); }
+}
+function fernClump(x, y, s, R) { for (let i = 0; i < 5; i++) fern(x + (R() - .5) * 6, y, (20 + R() * 12) * s, -Math.PI / 2 + (i - 2) * .45 + (R() - .5) * .2, i % 2 ? '#4E7E3A' : '#5E8E44', R); }
+function sapling(x, y, s, R) { curve(x, y, x + 2, y - 14 * s, x + (R() - .5) * 4, y - 24 * s, 1.6 * s, '#6A5240'); for (let i = 0; i < 4; i++) { const yy = y - (12 + i * 4) * s, sd = i % 2 ? 1 : -1; ctx.save(); ctx.translate(x + sd * 1, yy); ctx.rotate(sd * (.9 - i * .1)); ell(0, -5 * s, 2.6 * s, 5.5 * s, i % 2 ? '#5E9A4A' : '#4E8A40'); ctx.restore(); } }
+function mushrooms(x, y, s, R) { const col = R() < .5 ? ['#E2603A', '#F8E6D0'] : ['#F2E8D4', '#C8A27A']; for (let i = 0; i < 3; i++) { const mx = x + (i - 1) * 5 * s, h = (4 + R() * 4) * s, r = (3 + R() * 2.4) * s; seg(mx, y, mx, y - h, '#F2E8D8', 1.6 * s); ctx.fillStyle = col[0]; ctx.beginPath(); ctx.ellipse(mx, y - h, r, r * .7, 0, Math.PI, PI2); ctx.fill(); if (col[0] === '#E2603A') { ellG(mx - r * .4, y - h - r * .3, .8 * s, .8 * s, 0, '#FFF6E8'); ellG(mx + r * .3, y - h - r * .45, .7 * s, .7 * s, 0, '#FFF6E8'); } } }
+function fallenLog(x, y, l, s, R) {
+  ctx.fillStyle = lg(0, y - 6 * s, 0, y + 6 * s, ['#8A6E52', '#6A5240', '#4A3828']); ctx.beginPath(); ctx.moveTo(x - l / 2, y - 5 * s); ctx.lineTo(x + l / 2, y - 6 * s); ctx.lineTo(x + l / 2, y + 5 * s); ctx.lineTo(x - l / 2, y + 6 * s); ctx.closePath(); ctx.fill();
+  ellG(x + l / 2, y - .5 * s, 3.2 * s, 5.6 * s, 0, '#B8986E'); ctx.strokeStyle = 'rgba(90,60,30,.6)'; ctx.lineWidth = .8; ctx.beginPath(); ctx.ellipse(x + l / 2, y - .5 * s, 1.8 * s, 3.4 * s, 0, 0, PI2); ctx.stroke();
+  for (let i = 0; i < 4; i++) seg(x - l / 2 + 6 + i * l / 4, y - 3 * s, x - l / 2 + 14 + i * l / 4, y - 2.4 * s, 'rgba(40,26,16,.35)', 1);
+  for (let i = 0; i < 3; i++) leafBlob(x - l * .3 + i * l * .25, y - 6 * s, 3.4 * s, ['#4E7A3A', '#6A9A48', '#8EBA62'], R); mushrooms(x + l * .2, y - 5 * s, .7 * s, R);
+}
+function mossRock(x, y, r, R) { ell(x, y, r, r * .62, R() < .5 ? '#7E7A6E' : '#6E6A5E'); ctx.save(); ctx.beginPath(); ctx.ellipse(x, y, r, r * .62, 0, 0, PI2); ctx.clip(); ell(x - r * .2, y - r * .5, r * .9, r * .34, '#5E8A44'); ctx.restore(); }
+function waterLily(x, y, s, R) { for (let i = 0; i < 3 + R() * 3; i++) { const px = x + (R() - .5) * 34 * s, py = y + (R() - .5) * 9 * s, r = (5 + R() * 4) * s; ctx.fillStyle = R() < .5 ? '#3E7E44' : '#4E8E4A'; ctx.beginPath(); ctx.ellipse(px, py, r, r * .4, 0, .3, PI2 - .1); ctx.lineTo(px, py); ctx.closePath(); ctx.fill(); ell(px - r * .3, py - r * .1, r * .4, r * .12, 'rgba(255,255,255,.18)'); }
+  if (R() < .75) { const fx = x + (R() - .5) * 16 * s, fy = y - 2 * s; for (let k = 0; k < 6; k++) { const a = -Math.PI / 2 + (k - 2.5) * .45; ctx.save(); ctx.translate(fx, fy); ctx.rotate(a + Math.PI / 2); ell(0, -3.4 * s, 1.6 * s, 3.6 * s, k % 2 ? '#F0A8C8' : '#E888B4'); ctx.restore(); } ellG(fx, fy - 1 * s, 1.6 * s, 1.1 * s, 0, '#F6D85A'); } }
+function hyacinth(x, y, s, R) { for (let i = 0; i < 6; i++) { const a = (i / 6) * PI2, px = x + Math.cos(a) * 6 * s, py = y + Math.sin(a) * 2 * s - 3 * s; ell(px, py - 2 * s, 4 * s, 3.4 * s, i % 2 ? '#3E8A4A' : '#4E9A52'); }
+  seg(x, y - 4 * s, x, y - 16 * s, '#4E7A3A', 1.2 * s); for (let k = 0; k < 5; k++) ellG(x + (k % 2 ? 1.6 : -1.6) * s, y - (9 + k * 2) * s, 1.8 * s, 1.4 * s, 0, k % 2 ? '#B8A0E0' : '#A68AD8'); }
+function cattails(x, y, s, R) { for (let i = 0; i < 5; i++) { const rx = x + (i - 2) * 3.2 * s, h = (22 + R() * 14) * s, lean = (R() - .5) * 6 * s; curve(rx, y, rx + lean * .5, y - h * .6, rx + lean, y - h, 1.3, '#6E8A44'); if (i % 2 === 0) { ctx.save(); ctx.translate(rx + lean * .85, y - h * .8); ctx.rotate(lean * .03); ell(0, 0, 1.9 * s, 5 * s, '#7A5232'); ctx.restore(); } } }
+function propagule(x, y, s, R) { seg(x, y, x + (R() - .5) * 2, y - 14 * s, '#6E8A3E', 1.8 * s); ell(x - 3 * s, y - 15 * s, 3.4 * s, 1.6 * s, '#4E8A4A', -.5); ell(x + 3 * s, y - 15 * s, 3.4 * s, 1.6 * s, '#5E9A52', .5); }
+function burrow(x, y, s) { ell(x, y + 1, 6 * s, 2.4 * s, '#8A7458'); ell(x, y, 3 * s, 1.4 * s, '#2A1E14'); }
+function driftwood(x, y, l, s, R) { const a = (R() - .5) * .3; ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.fillStyle = '#B8AA92'; ctx.beginPath(); ctx.moveTo(-l / 2, -2 * s); ctx.quadraticCurveTo(0, -4.5 * s, l / 2, -1.5 * s); ctx.lineTo(l / 2 - 2, 2 * s); ctx.quadraticCurveTo(0, 3.5 * s, -l / 2, 2.4 * s); ctx.closePath(); ctx.fill(); seg(-l * .2, -1 * s, l * .1, -1.6 * s, 'rgba(90,80,60,.4)', .8); seg(l * .2, -2 * s, l * .32, -8 * s, '#A89A82', 1.6 * s); ctx.restore(); }
+function beachVine(x, y, s, R) { const len = (40 + R() * 40) * s, d = R() < .5 ? 1 : -1; curve(x, y, x + d * len * .5, y - 4 * s, x + d * len, y + 2 * s, 1.2, '#5E8A3E'); for (let k = 0; k < 7; k++) { const t = k / 6, px = x + d * len * t, py = y - Math.sin(Math.PI * t) * 3 * s; ell(px, py - 2 * s, 3 * s, 2.4 * s, k % 2 ? '#4E8A44' : '#6A9A4E'); if (k % 3 === 1) { ellG(px + 2 * s, py - 5 * s, 2.6 * s, 2.6 * s, 0, '#B070C8'); ellG(px + 2 * s, py - 5 * s, 1 * s, 1 * s, 0, '#F2E2F8'); } } }
+function beachGrass(x, y, s, R) { for (let i = 0; i < 8; i++) { const a = -Math.PI / 2 + (i / 7 - .5) * 1.8, L = (10 + R() * 10) * s; curve(x, y, x + Math.cos(a) * L * .5, y + Math.sin(a) * L * .7, x + Math.cos(a) * L, y + Math.sin(a) * L * .7 + L * .25, 1.1, i % 2 ? '#8FA25A' : '#A8B86A'); } }
+function coconutSprout(x, y, s) { ell(x, y, 6 * s, 4.6 * s, '#8A6A3E'); ell(x - 1.6 * s, y - 1.6 * s, 2.6 * s, 1.6 * s, 'rgba(255,240,200,.25)'); for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + (i - 1) * .5; curve(x, y - 3 * s, x + Math.cos(a) * 8 * s, y - 3 * s + Math.sin(a) * 12 * s, x + Math.cos(a) * 14 * s, y - 3 * s + Math.sin(a) * 14 * s + 4 * s, 2.4 * s, i % 2 ? '#5E9A4A' : '#4E8A40'); } }
+function floraDetail(L, R, w) {
+  const k = L.kind, by = BANK[k];
+  if (k === 'river' || k === 'pedada') {
+    const WY = k === 'river' ? 404 : 414;
+    // along the top of the bank: a varied hedge of forest-floor plants
+    for (let x = 20 + R() * 40; x < w; x += 58 + R() * 70) { const q = R(), s = .85 + R() * .4, y = by + 3 + R() * 4;
+      if (q < .22) keladi(x, y, s, R); else if (q < .4) pandan(x, y, s, R); else if (q < .56) senduduk(x, y, s, R); else if (q < .74) fernClump(x, y, s, R); else if (q < .86) sapling(x, y, s, R); else mushrooms(x, y, s, R); }
+    // on the bank face: a fallen log now and then, mossy stones at the water
+    for (let x = 120 + R() * 200; x < w; x += 340 + R() * 380) fallenLog(x, by + 22 + R() * 10, 40 + R() * 26, .9 + R() * .3, R);
+    for (let x = 60 + R() * 80; x < w; x += 110 + R() * 150) mossRock(x, WY - 3, 5 + R() * 5, R);
+    // in the water: lilies, water hyacinth, cattails at the edge
+    for (let x = 80 + R() * 100; x < w; x += 150 + R() * 200) waterLily(x, WY + 24 + R() * 60, .9 + R() * .4, R);
+    for (let x = 200 + R() * 200; x < w; x += 320 + R() * 300) hyacinth(x, WY + 16 + R() * 20, 1 + R() * .3, R);
+    for (let x = 140 + R() * 120; x < w; x += 260 + R() * 260) cattails(x, WY + 6, .9 + R() * .3, R);
+  } else if (k === 'mangrove') {
+    for (let x = 30 + R() * 30; x < w; x += 40 + R() * 60) { const q = R(), y = 380 + R() * 18; if (q < .45) propagule(x, y, .9 + R() * .4, R); else if (q < .75) burrow(x, y, .9 + R() * .4); else if (q < .9) mossRock(x, y, 4 + R() * 3, R); else fernClump(x, y, .7, R); }
+    for (let x = 100 + R() * 200; x < w; x += 300 + R() * 300) driftwood(x, 412 + R() * 40, 40 + R() * 30, 1, R);
+  } else {
+    for (let x = 30 + R() * 40; x < w; x += 60 + R() * 80) { const q = R(), y = 370 + R() * 16; if (q < .35) beachGrass(x, y, 1 + R() * .3, R); else if (q < .65) beachVine(x, y, 1, R); else if (q < .78) coconutSprout(x, y + 4, .9 + R() * .3); else mossRock(x, y + 4, 4 + R() * 3, R); }
+    for (let x = 80 + R() * 200; x < w; x += 220 + R() * 260) driftwood(x, 400 + R() * 110, 50 + R() * 40, 1.1, R);
+    // lower beach: a line of washed-up seaweed, starfish, crab holes, rocks with barnacles, grass patches
+    ctx.strokeStyle = 'rgba(70,80,40,.45)'; ctx.lineWidth = 2; ctx.beginPath(); for (let x = 0; x <= w; x += 8) { const yy = 446 + Math.sin(x * .013) * 10 + Math.sin(x * .07) * 2; x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); } ctx.stroke();
+    for (let x = 20 + R() * 40; x < w; x += 50 + R() * 60) { const yy = 446 + Math.sin(x * .013) * 10; ell(x, yy + (R() - .5) * 4, 5 + R() * 6, 1.8, R() < .5 ? '#5E6A34' : '#7A6A3A', (R() - .5) * .4); }
+    for (let x = 40 + R() * 60; x < w; x += 70 + R() * 90) { const q = R(), y = 460 + R() * 64;
+      if (q < .2) { ctx.save(); ctx.translate(x, y); ctx.rotate(R() * 6); ctx.fillStyle = R() < .5 ? '#E8743A' : '#D8584A'; ctx.beginPath(); for (let k = 0; k < 10; k++) { const a = k / 10 * PI2, r = k % 2 ? 2.4 : 7; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+      else if (q < .45) burrow(x, y, 1 + R() * .3);
+      else if (q < .65) { ell(x, y, 8, 5, '#7E766A'); for (let k = 0; k < 6; k++) ellG(x + (R() - .5) * 10, y - 1 + (R() - .5) * 5, 1.2, 1.2, 0, '#E8E0CC'); }
+      else if (q < .85) beachGrass(x, y, 1.2 + R() * .3, R);
+      else driftwood(x, y, 30 + R() * 20, .8, R); }
+    for (let i = 0; i < w / 50; i++) { const x = R() * w, y = 400 + R() * 120; ctx.save(); ctx.translate(x, y); ctx.rotate(R() * 6); ctx.fillStyle = R() < .5 ? '#F2DCC6' : '#E8C0A8'; ctx.beginPath(); ctx.moveTo(0, -3.4); ctx.lineTo(3, 2); ctx.lineTo(-3, 2); ctx.closePath(); ctx.fill(); ctx.restore(); } // shells
   }
 }
 // Mud pools along the estuary panorama.
@@ -2051,7 +2258,7 @@ function getLayers(L) {
     const f0 = far; far = mkLayer(farW, H, () => { ctx.drawImage(f0, 0, 0, farW, H); LW = farW - 2 * PAD; ctx.translate(PAD, 0); extraSky(L.kind, fo, R); });
     const g0 = fg; fg = mkLayer(fgW, H, () => { ctx.drawImage(g0, 0, 0, fgW, H); LW = fgW - 2 * PAD; ctx.translate(PAD, 0); extraFg(L.kind, R); });
   }
-  { const m0 = main; main = mkLayer(mainW, H, () => { ctx.drawImage(m0, 0, 0, mainW, H); LW = mainW; envDetail(L, mulberry(777 + mainW), mainW); }); }
+  { const m0 = main; main = mkLayer(mainW, H, () => { ctx.drawImage(m0, 0, 0, mainW, H); LW = mainW; envDetail(L, mulberry(777 + mainW), mainW); floraDetail(L, mulberry(913 + mainW), mainW); }); }
   LW = W;
   { const hy = HORIZON[L.kind]; const hz = mkLayer(farW, H, () => { ctx.drawImage(far, 0, 0, farW, H); const g = ctx.createLinearGradient(0, hy - 90, 0, hy + 10); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, hazeFor(L) + 'AA'); ctx.fillStyle = g; ctx.fillRect(0, hy - 90, farW, 100); }); far = blurred(hz, 1); }
   tint(fg, '#0C1C10', .32); fg = blurred(fg, 2.2);
@@ -2077,6 +2284,18 @@ function drawForeground(L, t, ev) {
   const sk = Math.sin(t * .35) * .01 + gustAt(t) * Math.sin(t * 1.0) * .022;
   ctx.save(); ctx.translate(0, H); ctx.transform(1, 0, sk, 1, 0, 0); ctx.translate(0, -H); ctx.drawImage(Ly.fg, -(Ly.fgW - (W + 2 * PAD)) - PAD - mx * 26 + drive() * 1.35, 0, Ly.fgW, H); ctx.restore();
 }
+// The sun sits in the far layer: it shifts with the parallax and the drive, and the trees can hide it.
+let SUN_SHADE = null; // the menu darkens its left side behind the title, which hides a sun there
+function sunView(L) {
+  const su = SUN[L.kind], Ly = getLayers(worldL() || L), mx = clamp(mouse.x / W - .5, -.5, .5), dv = drive();
+  const x = su[0] + mx * 10 + dv * 0.2, y = su[1];
+  const off = Math.max(0, -x, x - W) , onScreen = clamp(1 - off / 160, 0, 1);
+  let cover = 0; const O = Ly.FO && Ly.FO.occ;
+  if (O && onScreen > 0) { const mx0 = W - Ly.mainW + dv; let n = 0, sum = 0;
+    for (let dy = -18; dy <= 18; dy += 6) for (let dx = -18; dx <= 18; dx += 6) { const ox = Math.floor((x + dx - mx0) / O.k), oy = Math.floor((y + dy) / O.k); if (ox < 0 || oy < 0 || ox >= O.w || oy >= O.h) { n++; continue; } sum += O.a[oy * O.w + ox] / 255; n++; }
+    cover = n ? sum / n : 0; }
+  return { x, y, col: su[2], vis: onScreen * (1 - cover * .9) * (SUN_SHADE ? SUN_SHADE(x) : 1) };
+}
 function drawOverlay(L, t, ev) {
   if (L.kind === 'river' && ev > 0) { ctx.fillStyle = 'rgba(255,140,50,' + (0.13 * ev) + ')'; ctx.fillRect(0, 0, W, H); }
   if (L.kind === 'mangrove') {
@@ -2085,18 +2304,16 @@ function drawOverlay(L, t, ev) {
       for (let i = 0; i < 8; i++) { const x = ((t * (8 + i * 2) + i * 170) % (W + 360)) - 180; ell(x, 230 + (i % 4) * 50, 200, 36, 'rgba(246,249,245,' + (0.28 * a) + ')'); }
     }
   }
-  if (L.kind === 'pedada' && ev > 0) {
-    ctx.fillStyle = 'rgba(255,250,215,' + (0.14 * ev) + ')';
-    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(600 + i * 70, 0); ctx.lineTo(650 + i * 70, 0); ctx.lineTo(330 + i * 95, H); ctx.lineTo(250 + i * 95, H); ctx.closePath(); ctx.fill(); }
-  }
   if (L.kind === 'estuary' && ev > 0) { for (let i = 0; i < 22; i++) { const x = (i * 47 + t * 30) % W; const tw = .5 + .5 * Math.sin(t * 6 + i); ell(x, 306 + (i % 6) * 9, 3 * tw, 1.1, 'rgba(255,255,255,' + (0.85 * ev) + ')'); } }
-  { const su = SUN[L.kind]; ctx.save(); ctx.globalCompositeOperation = 'screen';
-    for (let i = 0; i < 6; i++) { const a0 = .5 + i * .32 + Math.sin(t * .07 + i) * .03, a = .045 + (i % 3) * .015, al = (.05 + .035 * Math.sin(t * .4 + i * 1.9)) * (L.kind === 'mangrove' ? 1.6 : 1);
-      if (al <= 0) continue; const g = ctx.createLinearGradient(su[0], su[1], su[0] + Math.cos(a0) * 700, su[1] + Math.sin(a0) * 700); g.addColorStop(0, su[2] + al + ')'); g.addColorStop(1, su[2] + '0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(su[0], su[1]); ctx.lineTo(su[0] + Math.cos(a0 - a) * 900, su[1] + Math.sin(a0 - a) * 900); ctx.lineTo(su[0] + Math.cos(a0 + a) * 900, su[1] + Math.sin(a0 + a) * 900); ctx.closePath(); ctx.fill(); }
+  // rays and glow come from where the sun actually is, and fade when it is behind the trees or off screen
+  const sv = sunView(L), boost = (L.kind === 'mangrove' ? 1.6 : 1) * (L.kind === 'pedada' ? 1 + ev * 1.2 : 1);
+  if (sv.vis > .02) { ctx.save(); ctx.globalCompositeOperation = 'screen';
+    for (let i = 0; i < 6; i++) { const a0 = .5 + i * .32 + Math.sin(t * .07 + i) * .03, a = .045 + (i % 3) * .015, al = (.05 + .035 * Math.sin(t * .4 + i * 1.9)) * boost * sv.vis;
+      if (al <= 0) continue; const g = ctx.createLinearGradient(sv.x, sv.y, sv.x + Math.cos(a0) * 700, sv.y + Math.sin(a0) * 700); g.addColorStop(0, sv.col + al + ')'); g.addColorStop(1, sv.col + '0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sv.x, sv.y); ctx.lineTo(sv.x + Math.cos(a0 - a) * 900, sv.y + Math.sin(a0 - a) * 900); ctx.lineTo(sv.x + Math.cos(a0 + a) * 900, sv.y + Math.sin(a0 + a) * 900); ctx.closePath(); ctx.fill(); }
     ctx.restore(); }
-  { const su = SUN[L.kind]; const pul = .85 + .15 * Math.sin(t * .5); ctx.save(); ctx.globalCompositeOperation = 'screen';
-    const g = ctx.createRadialGradient(su[0], su[1], 10, su[0], su[1], 420); g.addColorStop(0, su[2] + (.16 * pul) + ')'); g.addColorStop(1, su[2] + '0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+  { const pul = .85 + .15 * Math.sin(t * .5), gv = .35 + .65 * sv.vis; ctx.save(); ctx.globalCompositeOperation = 'screen';
+    const g = ctx.createRadialGradient(sv.x, sv.y, 10, sv.x, sv.y, 420); g.addColorStop(0, sv.col + (.16 * pul * gv) + ')'); g.addColorStop(1, sv.col + '0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore(); }
   ctx.drawImage(getLayers(L).vig, 0, 0, W, H);
 }
 // ===== Ambient particles =====
@@ -2224,7 +2441,6 @@ function drawSafariCar(t) {
   seg(0, SILL + 8, W, SILL + 8, 'rgba(255,255,255,.2)', 1.5);
   tube(0, SILL + 2, W, SILL + 2, 10, K.bar);
   for (const x of [330, 640]) tube(x, SILL + 2, x, SILL + 30, 8, K.bar);
-  ctx.globalAlpha = .55; text(K.label, W * 0.48, H - 14, 14, K.text, 'center', 800); ctx.globalAlpha = 1;
   // our own padded armrest along the window, bottom right
   { const sy = 384 + by;
     tube(770, sy + 96, 770, H + 10, 9, K.bar);
@@ -2431,6 +2647,10 @@ const MAPLABELS = {
   papua: { laut: [630, 490], sungai: [300, 274], desa: [[204, 180], [520, 444]] }
 };
 const REGMAP = {};
+// Extra character per island: how hilly it is, coral reefs in the shallows, a volcano.
+const REGEXTRA = { kalimantan: { hill: .10 }, sumatra: { hill: .12 }, jawa: { hill: .10, volcano: [54, 148, 27] }, sulawesi: { hill: .16, reef: true },
+  nusa: { hill: .16, reef: true }, maluku: { hill: .18, reef: true }, papua: { hill: .14 } };
+function arcS(px, py, L) { let best = 1e9, bs = 0, acc = 0; for (let i = 1; i < L.length; i++) { const A = L[i - 1], B = L[i], dx = B[0] - A[0], dy = B[1] - A[1], l2 = dx * dx + dy * dy || 1, len = Math.sqrt(l2); const t = clamp(((px - A[0]) * dx + (py - A[1]) * dy) / l2, 0, 1); const d = Math.hypot(px - A[0] - dx * t, py - A[1] - dy * t); if (d < best) { best = d; bs = acc + t * len; } acc += len; } return bs; }
 function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi; const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf); const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1); return lerp(lerp(a, b, u), lerp(c, d, u), v); }
 function regionMapImage(regId) {
   if (REGMAP[regId]) return REGMAP[regId];
@@ -2441,8 +2661,8 @@ function regionMapImage(regId) {
     mud: hex('#7C6648'), mudL: hex('#94795A'), mangBase: hex('#244C3C'), mang: [hex('#2F6450'), hex('#356E57'), hex('#2B5B49')], mangL: hex('#5A9A78'), mangD: hex('#1B3B2E'),
     bank: hex('#6B9A4E'), bankL: hex('#8DBA66'), forBase: hex('#1F4426'), forest: [hex('#2F5E34'), hex('#3A6E3E'), hex('#335F36'), hex('#447A44')], forL: hex('#6FA35E'), forD: hex('#1A3A20'),
     peat: hex('#5F7A3E'), peatL: hex('#738F4A'), clear: hex('#8A6B47'), clearL: hex('#A3825A'), roof: hex('#B5563A'), roofL: hex('#D67A52'), path: hex('#A58A60') };
-  const M = ISLANDMAP[regId] || ISLANDMAP.kalimantan;
-  const type = new Uint8Array(GW * GH);
+  const M = ISLANDMAP[regId] || ISLANDMAP.kalimantan, X = REGEXTRA[regId] || {};
+  const type = new Uint8Array(GW * GH), depth = new Uint8Array(GW * GH), rivS = new Float32Array(GW * GH), rivK = new Uint8Array(GW * GH);
   const meander = (x, y) => [x, y + Math.sin(x * .17) * 2.4 + Math.sin(x * .061 + 1) * 3.2];
   const mtrib = (x, y) => [x + Math.sin(y * .21) * 2 + Math.sin(y * .08) * 2.5, y];
   const put = (x, y, col) => { if (x < 0 || y < 0 || x >= GW || y >= GH) return; const i = (y * GW + x) * 4; d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255; };
@@ -2463,17 +2683,41 @@ function regionMapImage(regId) {
     if (t === 5 && M.fields === 'dry' && vnoise(x * .06 + seed, y * .06) > .42) t = 7;
     if (t === 5 && M.clearing && Math.hypot((x - M.clearing[0]) / 1.6, y - M.clearing[1]) < 7 + Math.sin(x * .9 + y) * 1.5) t = 7;
     type[k] = t;
+    if (t === 0) depth[k] = Math.min(255, Math.round(-dc));
+    if (t === 1) { if (dr / rw <= dt / tw) { rivK[k] = 1; rivS[k] = arcS(mx, my, M.river); } else { rivK[k] = 2; rivS[k] = -arcS(tx, ty, M.trib); } } // tributaries flow toward the main river
     let col;
-    if (t === 0) { const dd = -dc; col = dd < 3 ? P.sh1 : dd < 7 ? P.sh2 : (h < .07 ? P.sea2 : P.sea); if (dd > 7 && ((x + Math.floor(y / 6) * 5) % 23 < 3) && y % 6 === 0) col = P.wave; }
+    if (t === 0) { const dd = -dc; col = dd < 3 ? P.sh1 : dd < 7 ? P.sh2 : (h < .07 ? P.sea2 : P.sea);
+      if (X.reef && dd >= 2 && dd < 9 && vnoise(x * .35 + seed, y * .35) > .58) col = h < .5 ? hex('#3E9C9A') : hex('#2F8A8C'); } // coral reef in the shallows
     else if (t === 1) { const core = Math.min(dr / rw, dt / tw); col = core < .4 ? P.rivL : core > .85 ? P.rivD : P.riv; if (h < .04) col = P.rivL; }
     else if (t === 2) col = h < .3 ? P.mudL : P.mud;
     else if (t === 3) col = P.mangBase;
     else if (t === 4) col = h < .4 ? P.bankL : P.bank;
-    else if (t === 6) col = h < .35 ? P.peatL : P.peat;
+    else if (t === 6 && M.fields === 'wet') { // sawah: small plots with dikes, some flooded, some young, some ripening
+      const pyp = Math.floor(y / 6), u = x + pyp * 4, pxp = Math.floor(u / 10);
+      const q = hash2(pxp + seed, pyp), base = q < .08 ? hex('#6A9888') : q < .6 ? hex('#6B9A45') : q < .86 ? hex('#78A54C') : hex('#A49E50');
+      col = (u % 10 === 0 || y % 6 === 0) ? base.map(c => Math.min(255, c + 10)) : base; if (h < .08) col = base.map(c => c - 10); }
+    else if (t === 6) { col = h < .35 ? P.peatL : P.peat; if (vnoise(x * .32 + seed, y * .32) > .74) col = h < .5 ? hex('#3F5E4E') : hex('#4A6B56'); } // pools in the peat swamp
+    else if (t === 7 && M.fields === 'dry') { const g = vnoise(x * .2 + seed, y * .2); col = g > .6 ? hex('#B8975E') : g > .4 ? hex('#A88A55') : hex('#9C8350'); if (h < .1) col = hex('#C7A86C'); else if (h > .93) col = hex('#7E7A45'); } // savanna grass
     else if (t === 7) col = h < .3 ? P.clearL : P.clear;
     else col = P.forBase;
     put(x, y, col);
   }
+  if (X.volcano) { const [vx, vy, vr] = X.volcano;
+    for (let y = vy - vr; y <= vy + vr; y++) for (let x = vx - vr; x <= vx + vr; x++) {
+      if (x < 0 || y < 0 || x >= GW || y >= GH) continue; const k = y * GW + x; if (type[k] < 3) continue;
+      const dx = (x - vx) / 1.25, dy = y - vy, d = Math.hypot(dx, dy) / vr; if (d > 1) continue;
+      const lite = (-dx * .7 - dy * .7) / (Math.hypot(dx, dy) || 1), ang = Math.atan2(dy, dx), h = hash2(x + 3, y + seed);
+      let base;
+      const gully = Math.sin(ang * 11 + d * 4) > .62;
+      if (d < .05) base = hex('#4A3C32'); // crater
+      else if (d < .1) base = hex('#8A7A68'); // rim
+      else if (d < .3) base = gully ? hex('#9C8C78') : hex('#B4A48E'); // bare rock and ash near the top
+      else if (d < .5) base = gully ? hex('#7E7E58') : hex('#8E8E62'); // grass and scrub
+      else if (d < .72) { base = h < .55 ? hex('#5E8048') : hex('#6A8C50'); if (gully) base = hex('#527240'); }
+      else { if (h < .5 + (1 - d) * .8) { base = hex('#3A6E3E'); type[k] = 5; } else continue; }
+      type[k] = d < .72 ? 8 : type[k];
+      const f = lite * .32 * Math.min(1, d * 4); put(x, y, base.map(c => clamp(Math.round(c + (f > 0 ? (255 - c) * f : c * f)), 0, 255)));
+    } }
   // pass 2: tree crowns as small blobs (forest and mangrove)
   for (let gy = -2; gy < GH + 2; gy += 4) for (let gx = -2; gx < GW + 2; gx += 4) {
     const jx = gx + Math.floor(hash2(gx, gy + seed) * 4), jy = gy + Math.floor(hash2(gx + 11, gy) * 4);
@@ -2486,12 +2730,102 @@ function regionMapImage(regId) {
       put(x, y, col);
     }
   }
+  if (M.fields === 'dry') for (let k = 0; k < 160; k++) { const x = Math.floor(hash2(k, seed) * GW), y = Math.floor(hash2(seed, k + 9) * GH); if (type[y * GW + x] !== 7) continue;
+    put(x, y, hex('#5A4632')); put(x, y - 1, hex('#5A4632')); put(x - 1, y - 2, hex('#4E7A3A')); put(x + 1, y - 2, hex('#4E7A3A')); put(x, y - 3, hex('#6E9A48')); put(x, y - 2, hex('#3E6A30')); } // lontar palms
+  // relief: hills shaded from the upper left, stronger inland
+  if (X.hill) { const hg = (x, y) => vnoise(x * .045 + seed * .1, y * .045) * .6 + vnoise(x * .11, y * .11 + seed) * .4;
+    const SUN = [196, 222, 140], SHD = [8, 26, 14];
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const k = y * GW + x, t = type[k]; if (t < 3 || t === 8) continue;
+      const inland = clamp((M.coast(x, y) - 4) / 34, 0, 1); if (inland <= 0) continue;
+      const f = clamp((hg(x - 1, y - 1) - hg(x + 1, y + 1)) * 7, -1, 1) * X.hill * 1.6 * inland, i = k * 4, to = f > 0 ? SUN : SHD, a = Math.abs(f);
+      for (let c = 0; c < 3; c++) d[i + c] = clamp(Math.round(d[i + c] + (to[c] - d[i + c]) * a), 0, 255); } }
   // pass 3: villages, paths, stumps on the clearing
   const villages = M.villages, pa = M.path;
   if (pa) for (let k = 0; k < 40; k++) { const t = k / 40; put(Math.round(lerp(pa[0], pa[2], t)), Math.round(lerp(pa[1], pa[3], t) + Math.sin(t * 6) * 2), P.path); }
-  for (const v of villages) { for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 3; dx++) put(v[0] + dx, v[1] + dy, dy ? P.roof : P.roofL); put(v[0] + 1, v[1] + 2, hex('#4A3424')); }
+  for (const v of villages) for (let dy = -1; dy <= 4; dy++) for (let dx = -2; dx <= 4; dx++) { const x = v[0] + dx, y = v[1] + dy; if (x < 0 || y < 0 || x >= GW || y >= GH) continue; if (type[y * GW + x] >= 3 && hash2(x, y + 5) < .7) put(x, y, hash2(x + 1, y) < .5 ? P.mudL : hex('#8A9A58')); } // a yard around the houses
+  for (const v of villages) { for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 3; dx++) put(v[0] + dx, v[1] + dy, dy ? P.roof : P.roofL); for (let dx = 0; dx < 3; dx++) put(v[0] + dx, v[1] + 2, hex('#D9C7A0')); put(v[0] + 1, v[1] + 2, hex('#4A3424')); put(v[0] + 3, v[1] + 1, hex('#3A2A1D')); }
   if (M.clearing) for (let k = 0; k < 10; k++) { const a = hash2(k, 7) * 6.28, r = hash2(k, 9) * 6; put(Math.round(M.clearing[0] + Math.cos(a) * r * 1.5), Math.round(M.clearing[1] + Math.sin(a) * r), hex('#4E3A28')); }
-  g.putImageData(im, 0, 0); REGMAP[regId] = c; return c;
+  g.putImageData(im, 0, 0); Object.assign(c, { T: type, depth, rivS, rivK, X, M }); REGMAP[regId] = c; return c;
+}
+// The map comes alive: rivers flow, waves roll in, cloud shadows drift, boats, birds, smoke from the villages.
+// Everything is drawn on a 320x180 canvas (one pixel per map cell) and scaled up, so it stays pixel art.
+const REGANIM = {}; let REGFX = null;
+function regionAnim(regId) {
+  if (REGANIM[regId]) return REGANIM[regId];
+  const c = regionMapImage(regId), T = c.T, A = { river: [], foam: [], deep: [], boats: [], smoke: [] };
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const k = y * GW + x, t = T[k];
+    if (t === 1) A.river.push([x, y, c.rivS[k], hash2(x, y) * 4]);
+    else if (t === 0) {
+      const land = (xx, yy) => xx >= 0 && yy >= 0 && xx < GW && yy < GH && T[yy * GW + xx] >= 2;
+      if (land(x + 1, y) || land(x - 1, y) || land(x, y + 1) || land(x, y - 1)) A.foam.push([x, y, hash2(x + 7, y) * 6.28]);
+      else if (c.depth[k] > 7 && y % 6 === 0) A.deep.push([x, y]);
+    } }
+  // a canoe on the main river, going up and down the part you can see
+  const RV = c.M.river; if (RV && RV.length > 1) { const pts = []; let acc = 0; for (let i = 0; i < RV.length; i++) { if (i) acc += Math.hypot(RV[i][0] - RV[i - 1][0], RV[i][1] - RV[i - 1][1]); if (RV[i][0] > 8 && RV[i][0] < 218 && RV[i][1] > 30 && RV[i][1] < 172) pts.push(acc); }
+    if (pts.length >= 2) A.boats.push({ kind: 'river', s0: pts[0], s1: pts[pts.length - 1], ph: hash2(regId.length, 3) }); }
+  // fishing boats on open water: the longest stretches of sea in the visible part of the map
+  const runs = []; for (let y = 34; y < 172; y += 9) { let x0 = -1; for (let x = 4; x <= 222; x++) { const ok = x < 222 && T[y * GW + x] === 0 && c.depth[y * GW + x] > 4; if (ok && x0 < 0) x0 = x; if (!ok && x0 >= 0) { if (x - x0 > 26) runs.push([x0 + 3, x - 4, y]); x0 = -1; } } }
+  runs.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0])); for (const r of runs.slice(0, 2)) A.boats.push({ kind: 'sea', x0: r[0], x1: r[1], y: r[2], ph: hash2(r[0], r[2]) });
+  c.M.villages.forEach((v, i) => { if (i % 2 === 0) A.smoke.push([v[0] + 1, v[1] - 1, i]); });
+  if (c.X.volcano) A.volcano = [c.X.volcano[0], c.X.volcano[1] - 1];
+  A.clouds = [0, 1, 2].map(i => ({ x: hash2(i, regId.length) * 360 - 20, y: 30 + hash2(regId.length, i) * 130, w: 22 + hash2(i + 4, 1) * 18, h: 9 + hash2(i + 2, 5) * 6, v: 1.6 + hash2(i, 8) * 1.4 }));
+  A.birds = null; A.nextBirds = 3;
+  return (REGANIM[regId] = A);
+}
+function riverPoint(L, s) { let acc = 0; for (let i = 1; i < L.length; i++) { const A = L[i - 1], B = L[i], len = Math.hypot(B[0] - A[0], B[1] - A[1]); if (acc + len >= s || i === L.length - 1) { const t = clamp((s - acc) / len, 0, 1); return [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, Math.sign(B[0] - A[0]) || 1]; } acc += len; } return [L[0][0], L[0][1], 1]; }
+function drawRegionLife(regId, t, dt) {
+  const A = regionAnim(regId), map = regionMapImage(regId);
+  if (!REGFX) { REGFX = document.createElement('canvas'); REGFX.width = GW; REGFX.height = GH; }
+  const g = REGFX.getContext('2d'); g.clearRect(0, 0, GW, GH);
+  const px = (x, y, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), 1, 1); };
+  // cloud shadows drifting over the land
+  g.fillStyle = 'rgba(0,10,20,.16)';
+  for (const cl of A.clouds) { const x = ((cl.x + t * cl.v) % (GW + 80)) - 40; for (let yy = -cl.h; yy <= cl.h; yy++) { const hw = Math.round(cl.w * Math.sqrt(1 - (yy / cl.h) ** 2) * (1 + .18 * Math.sin(yy * .9 + cl.x))); g.fillRect(Math.round(x - hw), Math.round(cl.y + yy), hw * 2, 1); } }
+  // rivers: light streaks flowing downstream
+  for (const r of A.river) { const ph = ((r[2] - t * 7 + r[3]) % 15 + 15) % 15; if (ph < 1.3) px(r[0], r[1], 'rgba(200,235,245,' + (.55 - ph * .3) + ')'); }
+  // open sea: wave crests rolling by
+  const sh = Math.floor(t * 2.2);
+  g.fillStyle = 'rgba(80,140,170,.55)';
+  for (const w of A.deep) { const q = (w[0] + Math.floor(w[1] / 6) * 5 + sh) % 23; if (q < 3) g.fillRect(w[0], w[1], 1, 1); }
+  // surf breaking on the shore
+  for (const f of A.foam) { const a = Math.sin(t * 1.7 + f[2] + f[0] * .15); if (a > .35) px(f[0], f[1], 'rgba(235,248,250,' + ((a - .35) * .9) + ')'); }
+  // boats
+  for (const b of A.boats) {
+    let x, y, dir;
+    if (b.kind === 'river') { const span = b.s1 - b.s0, u = ((t * 2.2 / span + b.ph) % 2), k = u < 1 ? u : 2 - u, s = b.s0 + span * (k * k * (3 - 2 * k));
+      const p = riverPoint(map.M.river, s); x = p[0]; y = p[1] - (Math.sin(p[0] * .17) * 2.4 + Math.sin(p[0] * .061 + 1) * 3.2); dir = (u < 1 ? 1 : -1) * p[2]; }
+    else { const span = b.x1 - b.x0, u = ((t * 1.6 / span + b.ph) % 2), k = u < 1 ? u : 2 - u; x = b.x0 + span * (k * k * (3 - 2 * k)); y = b.y + Math.sin(t * 1.3 + b.ph * 6) * .4; dir = u < 1 ? 1 : -1; }
+    for (let i = 1; i <= 4; i++) px(x - dir * (i + 1), y + (i % 2 ? .4 : -.4), 'rgba(230,245,250,' + (.45 - i * .1) + ')'); // wake
+    px(x - 1, y, '#5A3C26'); px(x, y, '#6E4A2E'); px(x + 1, y, '#5A3C26');
+    if (b.kind === 'sea') { px(x, y - 1, '#EDE3CC'); px(x, y - 2, '#EDE3CC'); } else px(x, y - 1, '#E0A050');
+  }
+  // smoke from the kitchens in the villages, and from the volcano
+  for (const s of A.smoke) for (let i = 0; i < 4; i++) { const k = ((t * .5 + s[2] * .37 + i * .25) % 1); px(s[0] + Math.sin(k * 5 + s[2]) * 1.2 + k * 2, s[1] - k * 7, 'rgba(225,225,215,' + (.5 * (1 - k)) + ')'); }
+  if (A.volcano) for (let i = 0; i < 10; i++) { const k = ((t * .18 + i / 10) % 1); const r = 1 + k * 3; g.fillStyle = 'rgba(226,220,210,' + (.62 * (1 - k)) + ')'; g.fillRect(Math.round(A.volcano[0] + k * 12 + Math.sin(k * 6 + i) * 1.5 - r / 2), Math.round(A.volcano[1] - k * 22 - r / 2), Math.round(r), Math.round(r)); }
+  // a small flock crossing now and then, with shadows on the ground
+  A.nextBirds -= dt;
+  if (!A.birds && A.nextBirds <= 0) { const d = Math.random() < .5 ? 1 : -1; A.birds = { x: d > 0 ? -10 : GW + 10, y: rnd(40, 150), d, n: 3 + Math.floor(Math.random() * 3) }; }
+  if (A.birds) { const B = A.birds; B.x += B.d * 11 * dt;
+    for (let i = 0; i < B.n; i++) { const bx = B.x - B.d * (i * 4 + (i % 2) * 2), by = B.y + (i % 2 ? 3 : -1) * Math.ceil(i / 2), fl = Math.sin(t * 9 + i) > 0 ? 1 : 0;
+      px(bx + 2, by + 9, 'rgba(0,0,0,.18)'); px(bx, by, '#22262A'); px(bx - 1, by - fl, '#22262A'); px(bx + 1, by - fl, '#22262A'); }
+    if (B.x < -20 || B.x > GW + 20) { A.birds = null; A.nextBirds = rnd(6, 12); } }
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(REGFX, 0, 0, W, H); ctx.imageSmoothingEnabled = true;
+}
+const ISLANDINFO = {
+  kalimantan: 'Hutan hujan dataran rendah dan sungai besar yang berkelok. Bakau dan nipah tumbuh di muara.',
+  sumatra: 'Rawa gambut luas di sepanjang sungai, hutan dataran rendah, dan bakau di pantai timur.',
+  jawa: 'Sawah dan desa mengisi dataran, hutan tinggal di kantong kecil, dan gunung api menjulang.',
+  sulawesi: 'Perbukitan berhutan lebat, teluk berbakau, dan terumbu karang di perairan dangkal.',
+  nusa: 'Iklim lebih kering: sabana dan pohon lontar di antara hutan, pantai di utara dan selatan.',
+  maluku: 'Gugusan pulau kecil berbukit, dikelilingi terumbu karang dan laut dalam.',
+  papua: 'Hutan hujan yang luas, sungai besar, dan hutan bakau yang lebar di pesisir.'
+};
+function regionLegend(regId) {
+  const M = ISLANDMAP[regId] || ISLANDMAP.kalimantan, X = REGEXTRA[regId] || {}, L = [['#3A6E3E', 'Hutan'], ['#356E57', 'Bakau']];
+  if (M.river && M.river.length) L.push(['#3D7E92', 'Sungai']);
+  if (M.fields === 'wet') L.push(['#6E9E46', 'Sawah']); else if (M.fields === 'dry') L.push(['#A88A55', 'Sabana']); else if (M.peat < 1) L.push(['#5F7A3E', 'Gambut']);
+  if (X.reef) L.push(['#3E9C9A', 'Terumbu']); if (X.volcano) L.push(['#857464', 'Gunung api']); L.push(['#B5563A', 'Desa']);
+  return L;
 }
 const SPOTICON = {
   sungai: () => { ctx.strokeStyle = '#2F7E96'; ctx.lineWidth = 2; for (let k = 0; k < 2; k++) { ctx.beginPath(); ctx.moveTo(-7, -2 + k * 5); ctx.quadraticCurveTo(-3, -6 + k * 5, 0, -2 + k * 5); ctx.quadraticCurveTo(3, 2 + k * 5, 7, -2 + k * 5); ctx.stroke(); } },
@@ -2580,30 +2914,60 @@ const MENU_DUR = 24, MENU_FADE = 3.2, MENU_SLOW = .6;
 let MSNAP = null;
 // Bekantan for the menu: comes out of the foliage at the limb tip, walks in, sits and eats, now and then faces the camera.
 function mkMenuBekantan(L, xs) {
-  const x0 = xs + 165; const e = ent({ type: 'bekantan', kind: 'target', alpha: 0, f: -1, x: x0, y: branchY(L, x0) });
-  e.upd = dt => { const k = Math.min(1, e.t / 4); e.x = lerp(x0, xs, 1 - (1 - k) * (1 - k)); e.y = branchY(L, e.x); e.alpha = Math.min(1, e.t / .7); };
+  // comes out of the leaves at the tip of the limb it sits on and walks in toward the trunk
+  const C = L.canopy[1], side = xs >= C.x ? 1 : -1, x0 = C.x + side * 122 * C.sc, f = -side;
+  const e = ent({ type: 'bekantan', kind: 'target', alpha: 0, f, x: x0, y: branchY(L, x0) });
+  e.upd = dt => { const k = Math.min(1, e.t / 3); e.x = lerp(x0, xs, 1 - (1 - k) * (1 - k)); e.y = branchY(L, e.x); e.alpha = Math.min(1, e.t / .7); };
   e.flee = () => {}; e.moment = () => false; e.c = () => ({ x: e.x, y: e.y - 34 });
-  e.draw = () => drawBekantan(e.x, e.y, -1, e.t < 4 ? 'walk' : 'sit', e.t > 4 && (e.t % 6) > 3.6, e.t);
+  e.draw = () => drawBekantan(e.x, e.y, f, e.t < 3 ? 'walk' : 'sit', e.t > 3 && (e.t % 6) > 3.6, e.t);
   return e;
 }
 // Menu animals come in on the right half of the screen (the left half holds the title).
 // Perched animals pick a random spot along the second tree's branch, away from the ones already sitting there.
 const MENU_PERCHED = ['bekantan', 'pekakak', 'rangkong', 'kakatua', 'cendrawasih'];
 function menuSpot(L, others) {
-  const C = L.canopy[1], a = C.x - 90 * C.sc, b = W - 70, taken = others.filter(o => o.menuX != null).map(o => o.menuX);
+  const C = L.canopy[1], a = C.x - 118 * C.sc, b = C.x + 118 * C.sc, taken = others.filter(o => o.menuX != null).map(o => o.menuX);
   let best = null, bestD = -1;
   for (let i = 0; i < 40; i++) {
     const x = rnd(a, b); if (Math.abs(x - C.x) < 45 * C.sc) continue; // stay on the limbs, not on top of the trunk
     const d = taken.length ? Math.min(...taken.map(t => Math.abs(t - x))) : 1e9;
-    if (d >= 120) return x;
+    if (d >= 95) return x;
+    if (d > bestD) { bestD = d; best = x; }
+  }
+  return bestD >= 72 ? best : null; // no room on the branch right now
+}
+const MENU_GROUND = ['kuntul', 'kepiting', 'tembakul', 'penyu', 'biawak', 'badak'];
+const menuHW = e => 46 * (SCALE[e.type] || 1); // rough half width of an animal on the ground
+const MENU_H = { kuntul: 64, kepiting: 26, tembakul: 20, penyu: 30, biawak: 24, badak: 78 }; // rough height above the feet
+const menuTop = e => e.y - (MENU_H[e.type] || 40) * (SCALE[e.type] || 1);
+const menuNear = (a, b) => menuTop(a) < b.y + 10 && menuTop(b) < a.y + 10; // their boxes overlap vertically
+function menuGroundX(e, others, a, b) {
+  const near = others.filter(o => MENU_GROUND.indexOf(o.type) >= 0 && !o.dead && menuNear(o, e));
+  let best = rnd(a, b), bestD = -1e9;
+  for (let i = 0; i < 40; i++) {
+    const x = rnd(a, b), d = near.length ? Math.min(...near.map(o => Math.abs(o.x - x) - menuHW(o) - menuHW(e))) : 1e9;
+    if (d >= 40) return x;
     if (d > bestD) { bestD = d; best = x; }
   }
   return best;
 }
-function menuPlace(e, L, px) {
-  const py = px != null ? branchY(L, px) : 0;
-  if (e.type === 'kuntul') e.x = rnd(620, 760);
-  else if (e.type === 'kepiting' || e.type === 'tembakul' || e.type === 'penyu') e.x = rnd(600, 800);
+// keeps animals on the ground from walking into one another: the one moving closer stops and turns
+function menuSeparate(ents, prevX) {
+  const g = ents.filter(e => MENU_GROUND.indexOf(e.type) >= 0 && !e.dead && e.state !== 'fly');
+  for (let i = 0; i < g.length; i++) for (let j = 0; j < i; j++) {
+    const a = g[j], b = g[i]; if (!menuNear(a, b)) continue;
+    const gap = Math.abs(a.x - b.x) - menuHW(a) - menuHW(b); if (gap >= 12) continue;
+    if (gap < 0) { const sd = Math.sign(b.x - a.x) || 1; b.x += sd * Math.min(-gap, 1.5); if (b.f) b.f = sd; } // already touching: ease apart
+    for (const [m, o] of [[b, a], [a, b]]) {
+      const px = prevX.get(m); if (px == null || Math.abs(m.x - o.x) >= Math.abs(px - o.x)) continue;
+      m.x = px; if (m.f) m.f *= -1; if (m.dir) m.dir *= -1;
+    }
+  }
+}
+function menuPlace(e, L, px, others) {
+  const py = px != null ? branchY(L, px) : 0; others = others || [];
+  if (e.type === 'kuntul') e.x = menuGroundX(e, others, 560, 860);
+  else if (e.type === 'kepiting' || e.type === 'tembakul' || e.type === 'penyu') e.x = menuGroundX(e, others, 560, 880);
   else if (e.type === 'biawak') { e.f = -1; e.x = W + 80; }
   else if (e.type === 'badak') e.x = 905;
   else if (e.type === 'pekakak') { e.x = px; e.y = py; }
@@ -2611,27 +2975,68 @@ function menuPlace(e, L, px) {
   return e;
 }
 function menuSpawn(k, L, others) {
-  const px = MENU_PERCHED.indexOf(k) >= 0 ? menuSpot(L, others) : null;
-  const e = k === 'bekantan' ? mkMenuBekantan(L, px) : (TARGETMK[k] || MAKERS[k])(L); menuPlace(e, L, px); e.menuX = px; scaled(e); e.t = 0; return e;
+  const perched = MENU_PERCHED.indexOf(k) >= 0, px = perched ? menuSpot(L, others) : null;
+  if (perched && px == null) return null; // wait until someone leaves
+  const e = k === 'bekantan' ? mkMenuBekantan(L, px) : (TARGETMK[k] || MAKERS[k])(L); menuPlace(e, L, px, others); e.menuX = px; scaled(e); e.t = 0; return e;
 }
 function menuScene(dt) {
   const M = G.menu || (G.menu = { i: 0, t: 0, ents: [], fade: 0, done: {} });
   M.t += dt; const S0 = MENU_SCENES[M.i], L = LAYOUTS[S0.layout];
-  for (const [k, at] of S0.spawn) if (!M.done[k] && M.t >= at * 1.8) { M.done[k] = 1; try { M.ents.push(menuSpawn(k, L, M.ents)); } catch (er) {} }
+  M.wait = M.wait || {};
+  for (const [k, at] of S0.spawn) if (!M.done[k] && M.t >= at * 1.8 && M.t >= (M.wait[k] || 0)) { M.done[k] = 1; try { const e = menuSpawn(k, L, M.ents); if (e) M.ents.push(e); else { M.done[k] = 0; M.wait[k] = M.t + 1.5; } } catch (er) {} }
+  const prevX = new Map(); for (const e of M.ents) prevX.set(e, e.x);
   for (const e of M.ents) { e.t += dt * MENU_SLOW; try { e.upd(dt * MENU_SLOW); } catch (er) { e.dead = true; } }
+  menuSeparate(M.ents, prevX);
   M.ents = M.ents.filter(e => !e.dead && toScreenX(e.x) > -300 && toScreenX(e.x) < W + 300);
   if (M.t > 4) { try { getLayers(LAYOUTS[MENU_SCENES[(M.i + 1) % MENU_SCENES.length].layout]); } catch (er) {} }
   return { M, S0, L };
 }
+// Water on the menu: sun glitter, rings spreading from fish and drops, a few leaves drifting by.
+const MENU_WATER = { rings: [], drift: [], nextRing: 0 };
+function menuWater(L, t, dt, ev) {
+  if (MENU_WATER.kind !== L.kind) { MENU_WATER.kind = L.kind; MENU_WATER.rings = []; MENU_WATER.drift = []; }
+  const band = SHIMMER[L.kind][SHIMMER[L.kind].length - 1], y0 = band[0] + 6, y1 = Math.min(band[1] - 6, band[0] + 120), warm = L.kind === 'river' || L.kind === 'estuary';
+  // glitter: small bright flecks that twinkle, denser near the horizon
+  for (let i = 0; i < 46; i++) {
+    const hx = ((i * 7919) % 997) / 997, hy = ((i * 104729) % 991) / 991, x = (hx * (W + 80) + t * (6 + (i % 4) * 3)) % (W + 80) - 40, y = y0 + Math.pow(hy, 1.6) * (y1 - y0);
+    const f = Math.sin(t * (1.4 + (i % 5) * .35) + i * 2.3); if (f < .4) continue;
+    const a = (f - .4) * (.9 + ev * .5), w = 3 + (i % 3) * 2;
+    ctx.fillStyle = (warm ? 'rgba(255,226,170,' : 'rgba(240,250,255,') + a + ')';
+    ctx.beginPath(); ctx.moveTo(x - w, y); ctx.lineTo(x, y - 1.2); ctx.lineTo(x + w, y); ctx.lineTo(x, y + 1.2); ctx.closePath(); ctx.fill();
+  }
+  // rings
+  MENU_WATER.nextRing -= dt;
+  if (MENU_WATER.nextRing <= 0) { MENU_WATER.nextRing = rnd(.7, 1.6); MENU_WATER.rings.push({ x: rnd(40, W - 40), y: rnd(y0 + 8, y1), t: 0, life: rnd(2.2, 3.2), n: Math.random() < .5 ? 2 : 1 }); }
+  for (const r of MENU_WATER.rings) {
+    r.t += dt; const k = r.t / r.life;
+    for (let j = 0; j < r.n; j++) { const kk = k - j * .18; if (kk <= 0 || kk >= 1) continue; const sc = clamp(.6 + (r.y - y0) / (y1 - y0 + 1) * .8, .4, 1.4);
+      ctx.strokeStyle = 'rgba(255,255,255,' + (.42 * (1 - kk)) + ')'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(r.x, r.y, (4 + kk * 34) * sc, (1.2 + kk * 7) * sc, 0, 0, PI2); ctx.stroke(); }
+  }
+  MENU_WATER.rings = MENU_WATER.rings.filter(r => r.t < r.life);
+  // leaves floating on the water, drifting with the current
+  if (MENU_WATER.drift.length < 3 && Math.random() < dt * .4) { const d = pick([1, -1]); MENU_WATER.drift.push({ x: d > 0 ? -20 : W + 20, y: rnd(y0 + 14, y1), vx: d * rnd(10, 18), r: rnd(0, 6), ph: rnd(0, 6), col: pick(['#6E9A4A', '#B58A3E', '#8DB35A']) }); }
+  for (const l of MENU_WATER.drift) {
+    l.x += l.vx * dt; l.ph += dt; const bob = Math.sin(l.ph * 1.6) * 1.2, rot = l.r + Math.sin(l.ph * .7) * .4;
+    ctx.save(); ctx.translate(l.x, l.y + bob); ctx.rotate(rot); ell(0, 1.5, 7, 2.4, 'rgba(0,0,0,.18)'); ell(0, 0, 7, 3, l.col); seg(-6, 0, 6, 0, 'rgba(0,0,0,.25)', .7); ctx.restore();
+    if (Math.sin(l.ph * 1.6) > .97) MENU_WATER.rings.push({ x: l.x, y: l.y + 2, t: 0, life: 1.4, n: 1 });
+  }
+  MENU_WATER.drift = MENU_WATER.drift.filter(l => l.x > -40 && l.x < W + 40);
+}
 function drawMenu0() {
   const dt = 1 / 60, { M, S0, L } = menuScene(dt), ML = L;
-  drawScene(L, G.time, S0.ev);
+  SWAY_K = 2.4; drawScene(L, G.time, S0.ev); SWAY_K = 1;
+  menuWater(L, G.time, dt, S0.ev);
   for (const e of M.ents) { ctx.save(); ctx.globalAlpha = clamp(e.alpha, 0, 1); if (e.sc !== 1) { ctx.translate(e.x, e.y); ctx.scale(e.sc, e.sc); ctx.translate(-e.x, -e.y); } try { e.draw(); } catch (er) {} ctx.restore(); }
-  G.menuParts = updParts(G.menuParts || [], L, dt, S0.ev); drawParts(G.menuParts); drawForeground(L, G.time, S0.ev); drawOverlay(L, G.time, S0.ev);
+  G.menuParts = updParts(G.menuParts || [], L, dt, S0.ev);
+  // a bit more going on than in a session: birds crossing the sky, leaves falling from the crowns, butterflies
+  if (Math.random() < dt * .09) G.menuParts.push(newPart(L, 'flock'));
+  if (L.kind !== 'estuary' && Math.random() < dt * (.9 + gustAt(G.time) * 5)) { const lf = newPart(L, 'leaf'); lf.x = rnd(480, W); G.menuParts.push(lf); }
+  if (L.kind !== 'estuary' && Math.random() < dt * .12) { const b = newPart(L, 'butterfly'); b.x = rnd(520, W - 60); G.menuParts.push(b); }
+  drawParts(G.menuParts); drawForeground(L, G.time, S0.ev); SUN_SHADE = x => 1 - (x < 420 ? lerp(.82, .45, clamp(x / 420, 0, 1)) : lerp(.45, 0, clamp((x - 420) / 180, 0, 1))); drawOverlay(L, G.time, S0.ev); SUN_SHADE = null;
   // crossfade: the previous scene is a snapshot that fades out over the new one
   if (M.fade > 0 && MSNAP) { ctx.save(); ctx.globalAlpha = M.fade; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(MSNAP, 0, 0); ctx.restore(); M.fade = Math.max(0, M.fade - dt / MENU_FADE); }
   if (M.t >= MENU_DUR) { if (!MSNAP) MSNAP = document.createElement('canvas'); MSNAP.width = cv.width; MSNAP.height = cv.height; MSNAP.getContext('2d').drawImage(cv, 0, 0);
-    M.i = (M.i + 1) % MENU_SCENES.length; M.t = 0; M.ents = []; M.done = {}; M.fade = 1; G.menuParts = []; }
+    M.i = (M.i + 1) % MENU_SCENES.length; M.t = 0; M.ents = []; M.done = {}; M.wait = {}; M.fade = 1; G.menuParts = []; MENU_WATER.rings = []; MENU_WATER.drift = []; }
   const heroE = M.ents.find(e => e.type === S0.hero), show = { A: { k: S0.hero }, a: heroE ? clamp(heroE.alpha, 0, 1) * clamp((MENU_DUR - M.t) / .8, 0, 1) : 0 };
   { const sp = SPECIES[show.A.k], d = DEX[show.A.k]; ctx.globalAlpha = show.a; font(13, 700); const n1 = sp.name, w1 = ctx.measureText(n1).width; font(11, 500); const w2 = ctx.measureText(sp.latin).width; const bw = Math.max(w1, w2) + 58, bx = W - 34 - bw, by = 424;
     rrect(bx, by, bw, 46, 12); ctx.fillStyle = 'rgba(12,22,16,.72)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,244,224,.25)'; ctx.lineWidth = 1; ctx.stroke();
@@ -2649,10 +3054,6 @@ function drawMenu0() {
   font(80, 900); ctx.textAlign = 'left'; ctx.fillStyle = '#FFF4E0'; ctx.fillText('JEPRET', 64, 190);
   const tg = ctx.createLinearGradient(0, 214, 0, 272); tg.addColorStop(0, '#FFE6A0'); tg.addColorStop(1, '#F2A04A'); ctx.fillStyle = tg; ctx.fillText('RIMBA', 64, 270);
   const rw = ctx.measureText('RIMBA').width; ctx.restore();
-  // leaf sprouting from the title, swaying a little
-  ctx.save(); ctx.translate(64 + rw + 12, 214); ctx.rotate(-.5 + Math.sin(t * 1.4) * .08);
-  ctx.fillStyle = '#5EA852'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(14, -18, 34, -14); ctx.quadraticCurveTo(22, 4, 0, 0); ctx.fill();
-  ctx.fillStyle = '#86C86A'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(14, -18, 34, -14); ctx.quadraticCurveTo(18, -8, 0, 0); ctx.fill(); seg(0, 0, 26, -11, '#3E7A3A', 1.2); ctx.restore();
   // tagline
   text('Satu jepretan untuk menjaga hutan', 62, 326, 17, '#E4EEE6', 'left', 500);
   text('dan pesisir Indonesia.', 62, 349, 17, '#E4EEE6', 'left', 500);
@@ -2663,9 +3064,6 @@ function drawMenu0() {
   button(60, 434, 194, 44, 'Cara Main', () => { G.howto = true; }, { size: 16 }); menuIcon('help', 60 + 97 - 58, 456, '#1E2B22');
   button(266, 434, 194, 44, 'Ensiklopedia', () => { G.screen = 'dex'; }, { size: 16 }); menuIcon('book', 266 + 97 - 66, 456, '#1E2B22');
   rrect(266 + 12, 434 + 37, 170, 3, 1.5); ctx.fillStyle = 'rgba(30,43,34,.12)'; ctx.fill(); if (found) { rrect(266 + 12, 434 + 37, 170 * found / DEXORDER.length, 3, 1.5); ctx.fillStyle = '#E07A3F'; ctx.fill(); }
-  // footnote
-  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(68, 509, 6, 0, PI2); ctx.stroke(); for (let k = 0; k < 6; k++) { const a = k / 6 * PI2 + t * .5; seg(68 + Math.cos(a) * 2, 509 + Math.sin(a) * 2, 68 + Math.cos(a + .9) * 6, 509 + Math.sin(a + .9) * 6, 'rgba(255,255,255,.55)', 1); }
-  text('Satu mekanik: bidik dan jepret', 82, 513, 12.5, 'rgba(255,255,255,.6)', 'left', 600);
 }
 function drawHowto() {
   ctx.fillStyle = 'rgba(5,12,9,.7)'; ctx.fillRect(0, 0, W, H); UI = [];
@@ -2717,40 +3115,85 @@ function drawMissionArt(m, x, y, w, h, t) {
   const g = ctx.createRadialGradient(x + w / 2, y + h / 2, h * .35, x + w / 2, y + h / 2, h * .9); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.28)'); ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
   ctx.restore();
 }
+// Mission select: a night jungle behind, cards that rise in one after another.
+let MISSION_BG = null;
+function missionBg() {
+  if (MISSION_BG) return MISSION_BG;
+  const R = mulberry(311), F0 = FACET; FACET = false; // smooth shapes: the background should feel far away
+  MISSION_BG = mkLayer(W, H, () => {
+    ctx.fillStyle = lg(0, 0, 0, H, ['#0C1A13', '#132A1D', '#0E1F16']); ctx.fillRect(0, 0, W, H);
+    // distant tree line, two layers
+    for (const [y0, col, sz] of [[372, '#132B1D', 46], [418, '#0F2318', 58]]) for (let x = -40; x < W + 60; x += sz * .9 + R() * 30) leafBlob(x, y0 + R() * 30, sz + R() * 20, [shade(col, -.2), col, shade(col, .05)], R);
+    ctx.fillStyle = '#0E2017'; ctx.fillRect(0, 440, W, H - 440);
+    // canopy hanging in from the top
+    for (let i = 0; i < 26; i++) { const x = i * 40 - 20 + R() * 20, y = -26 + R() * 26 + (i % 3) * 6; leafBlob(x, y, 30 + R() * 22, ['#0B1A11', '#142C1C', '#24442C'], R); }
+    for (const sd of [0, 1]) for (let i = 0; i < 6; i++) leafBlob(sd ? W + 18 - R() * 30 : -18 + R() * 30, 60 + i * 80 + R() * 30, 30 + R() * 18, ['#08140D', '#0F2216', '#183322'], R);
+    // lianas
+    for (let i = 0; i < 6; i++) { const x0 = 70 + i * 165 + R() * 40, len = 60 + R() * 90; ctx.strokeStyle = '#1C3A24'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x0, 0); ctx.quadraticCurveTo(x0 + 8, len * .6, x0 + 3, len); ctx.stroke(); }
+  });
+  FACET = F0; MISSION_BG = blurred(MISSION_BG, 1.4);
+  return MISSION_BG;
+}
+function calIcon(x, y, col) { ctx.strokeStyle = col; ctx.lineWidth = 1.5; rrect(x - 6, y - 5, 12, 11, 2); ctx.stroke(); seg(x - 6, y - 1, x + 6, y - 1, col, 1.5); seg(x - 3, y - 7, x - 3, y - 4, col, 1.5); seg(x + 3, y - 7, x + 3, y - 4, col, 1.5); }
 function drawMissions() {
-  ctx.fillStyle = '#14231B'; ctx.fillRect(0, 0, W, H);
-  const glow = ctx.createRadialGradient(W / 2, 260, 40, W / 2, 260, 520); glow.addColorStop(0, 'rgba(60,110,72,.35)'); glow.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-  text('Pilih misi', W / 2, 66, 32, '#FFF4E0', 'center', 800);
-  text('Dokumentasikan satwa endemik Indonesia untuk arsip konservasi desa.', W / 2, 94, 16, '#B9CBBE', 'center', 400);
-  const cw = 236, ch = 320, gap = 26, n = MISSIONS.length, x0 = (W - (n * cw + (n - 1) * gap)) / 2, yb = 124;
+  const t = G.time; if (!G.msT || t - G.msLast > .25) G.msT = t; G.msLast = t; const et = t - G.msT; // time since the screen opened
+  ctx.drawImage(missionBg(), 0, 0, W, H);
+  // soft light behind the cards and drifting fireflies
+  const glow = ctx.createRadialGradient(W / 2, 300, 30, W / 2, 300, 460); glow.addColorStop(0, 'rgba(90,150,90,.22)'); glow.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 22; i++) { const x = (i * 131 + t * (6 + i % 4 * 3)) % (W + 40) - 20, y = 140 + ((i * 71) % 360) + Math.sin(t * .8 + i) * 14, a = Math.max(0, Math.sin(t * 1.3 + i * 2.2));
+    ellG(x, y, 1.6, 1.6, 0, 'rgba(230,255,170,' + (.75 * a) + ')'); ellG(x, y, 6, 6, 0, 'rgba(230,255,170,' + (.12 * a) + ')'); }
+  // title
+  const ta = clamp(et / .5, 0, 1); ctx.globalAlpha = ta;
+  text('Pilih misi', W / 2, 62 + (1 - ta) * 8, 34, '#FFF4E0', 'center', 800);
+  ctx.fillStyle = 'rgba(232,162,122,.7)'; ctx.fillRect(W / 2 - 22, 76, 44, 2.5);
+  text('Dokumentasikan satwa endemik Indonesia untuk arsip konservasi desa.', W / 2, 100, 15.5, '#B9CBBE', 'center', 400);
+  ctx.globalAlpha = 1;
+  const cw = 240, ch = 326, gap = 24, n = MISSIONS.length, x0 = (W - (n * cw + (n - 1) * gap)) / 2, yb = 122;
   MISSIONS.forEach((m, i) => {
-    const x = x0 + i * (cw + gap); const hov = m.open && inRect(mouse.x, mouse.y, { x, y: yb, w: cw, h: ch }); const y0 = yb - (hov ? 4 : 0);
-    if (hov) { ctx.fillStyle = 'rgba(0,0,0,.3)'; rrect(x + 4, y0 + 10, cw, ch, 16); ctx.fill(); }
-    rrect(x, y0, cw, ch, 16); ctx.fillStyle = m.open ? (hov ? '#2E4A38' : '#223828') : '#1B2B21'; ctx.fill();
-    ctx.strokeStyle = m.open ? (hov ? '#E07A3F' : '#3D5E48') : '#2A3D31'; ctx.lineWidth = 2; ctx.stroke();
+    const k = clamp((et - .12 - i * .1) / .45, 0, 1), ein = 1 - Math.pow(1 - k, 3); if (k <= 0) return;
+    const x = x0 + i * (cw + gap); const hov = m.open && k >= 1 && inRect(mouse.x, mouse.y, { x, y: yb, w: cw, h: ch });
+    m._h = lerp(m._h || 0, hov ? 1 : 0, .2); const lift = m._h * 7, y0 = yb - lift + (1 - ein) * 40;
+    ctx.save(); ctx.globalAlpha = ein;
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,' + (.28 + m._h * .15) + ')'; rrect(x + 3, y0 + 8 + lift * .8, cw, ch, 18); ctx.fill();
+    // card
+    rrect(x, y0, cw, ch, 18); ctx.fillStyle = m.open ? lg(0, y0, 0, y0 + ch, ['#264430', '#1C3424', '#172B1E']) : '#18261D'; ctx.fill();
+    ctx.strokeStyle = m.open ? (m._h > .05 ? 'rgba(240,140,80,' + (.4 + m._h * .6) + ')' : 'rgba(110,160,120,.35)') : 'rgba(60,80,66,.5)'; ctx.lineWidth = 2; ctx.stroke();
+    if (m._h > .05) for (let gI = 1; gI <= 3; gI++) { ctx.strokeStyle = 'rgba(240,140,80,' + (.16 * m._h / gI) + ')'; ctx.lineWidth = 2 + gI * 4; rrect(x - gI, y0 - gI, cw + gI * 2, ch + gI * 2, 18 + gI); ctx.stroke(); } // soft glow without shadowBlur (cheap)
     if (m.open) {
-      drawMissionArt(m, x + 10, y0 + 10, cw - 20, 200, G.time);
-      if (m.status) { font(11, 700); const tw = ctx.measureText(m.status[0]).width + 16; rrect(x + 18, y0 + 18, tw, 20, 10); ctx.fillStyle = 'rgba(16,26,20,.72)'; ctx.fill(); ellG(x + 26, y0 + 28, 3, 3, 0, m.status[1]); text(m.status[0], x + 32, y0 + 32, 11, '#F2E8D5', 'left', 700); }
-      text(m.name, x + 16, y0 + 242, 22, '#FFF4E0', 'left', 800); text(m.latin, x + 16, y0 + 264, 13, '#B9CBBE', 'left', 400);
-      text(MAX_DAYS + ' hari · Misi ' + (i + 1), x + 16, y0 + 300, 13, '#E8A27A', 'left', 600);
-      if (hov) text('Mulai →', x + cw - 16, y0 + 300, 13, '#FFD2B0', 'right', 700);
+      drawMissionArt(m, x + 10, y0 + 10, cw - 20, 200, t);
+      // art frame: inner border and a soft fade at the bottom
+      ctx.save(); rrect(x + 10, y0 + 10, cw - 20, 200, 12); ctx.clip(); const fg = ctx.createLinearGradient(0, y0 + 150, 0, y0 + 210); fg.addColorStop(0, 'rgba(15,28,20,0)'); fg.addColorStop(1, 'rgba(15,28,20,.35)'); ctx.fillStyle = fg; ctx.fillRect(x + 10, y0 + 150, cw - 20, 60); ctx.restore();
+      ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; rrect(x + 10, y0 + 10, cw - 20, 200, 12); ctx.stroke();
+      if (m.status) { font(11, 700); const tw = ctx.measureText(m.status[0]).width + 22; rrect(x + 18, y0 + 18, tw, 22, 11); ctx.fillStyle = 'rgba(12,22,16,.78)'; ctx.fill(); ellG(x + 28, y0 + 29, 3.5, 3.5, 0, m.status[1]); text(m.status[0], x + 36, y0 + 33, 11, '#F2E8D5', 'left', 700); }
+      if (DEX[m.id]) { rrect(x + cw - 42, y0 + 18, 24, 24, 12); ctx.fillStyle = '#7FD08E'; ctx.fill(); text('✓', x + cw - 30, y0 + 35, 13, '#14401C', 'center', 900); }
+      text(m.name, x + 18, y0 + 242, 22, '#FFF4E0', 'left', 800); text(m.latin, x + 18, y0 + 262, 13, '#9FB8A6', 'left', 400);
+      ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(x + 18, y0 + 276, cw - 36, 1);
+      calIcon(x + 25, y0 + 298, '#E8A27A'); text(MAX_DAYS + ' hari', x + 37, y0 + 302, 12.5, '#E8C3A6', 'left', 600);
+      ctx.save(); ctx.translate(x + 89, y0 + 297); ctx.scale(.62, .62); menuIcon('camera', 0, 0, '#E8A27A'); ctx.restore(); text(SHOTS + ' foto/hari', x + 99, y0 + 302, 12, '#E8C3A6', 'left', 600);
+      // start pill
+      const bw = 58, bx = x + cw - 16 - bw, by = y0 + 286; rrect(bx, by, bw, 24, 12); ctx.fillStyle = m._h > .05 ? 'rgba(224,122,63,' + (.35 + .65 * m._h) + ')' : 'rgba(224,122,63,.22)'; ctx.fill();
+      text('Mulai →', bx + bw / 2, by + 16.5, 12, m._h > .5 ? '#FFFFFF' : '#FFD2B0', 'center', 700);
       UI.push({ x, y: yb, w: cw, h: ch, fn: () => newMission(m) }); if (hov) hovering = true;
     } else {
-      rrect(x + 10, y0 + 10, cw - 20, 200, 10); ctx.fillStyle = '#16241C'; ctx.fill();
+      rrect(x + 10, y0 + 10, cw - 20, 200, 12); ctx.fillStyle = '#13201A'; ctx.fill();
       text('?', x + cw / 2, y0 + 128, 54, '#2F4637', 'center', 800);
-      text(m.name, x + 16, y0 + 242, 22, '#5E7566', 'left', 800); text('Segera hadir', x + 16, y0 + 266, 13, '#5E7566', 'left', 500);
+      text(m.name, x + 18, y0 + 242, 22, '#5E7566', 'left', 800); text('Segera hadir', x + 18, y0 + 264, 13, '#5E7566', 'left', 500);
     }
+    ctx.restore();
   });
   button(W / 2 - 70, 470, 140, 44, 'Kembali', () => { G.screen = 'menu'; });
 }
 function drawMap() {
   const hovR = (mouse.y > 100 && mouse.y < 500) ? regionAt(mouse.x, mouse.y) : null;
   ctx.imageSmoothingEnabled = false; ctx.drawImage(mapImage(hovR ? hovR.code : 0), 0, 0, W, H); ctx.imageSmoothingEnabled = true;
-  for (const l of SEALABELS) { ctx.font = 'italic 500 12px ' + FONT; ctx.fillStyle = 'rgba(150,200,220,.55)'; ctx.textAlign = 'center'; ctx.fillText(l[0], l[1], l[2]); }
-  if (hovR) {
-    for (let k = 0; k < 26; k++) { const idx = hovR.cells[Math.floor(hash2(k, hovR.code) * hovR.cells.length)]; const tw = Math.sin(G.time * 4 + k * 1.7); if (tw < 0.2) continue; const x = (idx % GW) * CELL, y = Math.floor(idx / GW) * CELL; ctx.fillStyle = 'rgba(255,226,120,' + (tw * .95) + ')'; ctx.fillRect(x, y, CELL, CELL); }
-  }
-  for (const r of REGIONS) { const on = r === hovR; font(on ? 16 : 14, 800); ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(10,30,20,.85)'; ctx.strokeText(r.name, r.label.x, r.label.y); ctx.fillStyle = on ? '#FFFFFF' : 'rgba(255,255,255,.85)'; ctx.fillText(r.name, r.label.x, r.label.y); }
+  drawMapLife(G.time, G.lastDt || 1 / 60, hovR ? hovR.code : 0);
+  { const vg = ctx.createRadialGradient(W / 2, H * .56, H * .4, W / 2, H * .56, W * .7); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,10,16,.45)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H); }
+  for (const l of SEALABELS) { ctx.font = 'italic 500 12px ' + FONT; ctx.fillStyle = 'rgba(160,210,228,.6)'; ctx.textAlign = 'center'; ctx.fillText(l[0], l[1], l[2]); }
+  for (const r of REGIONS) { const on = r === hovR, lx = r.label.x, ly = r.label.y + (on ? -2 : 0);
+    if (on) { font(15, 800); const tw = ctx.measureText(r.name).width + 26; ctx.fillStyle = 'rgba(0,0,0,.3)'; rrect(lx - tw / 2 + 2, ly - 17, tw, 26, 13); ctx.fill(); rrect(lx - tw / 2, ly - 19, tw, 26, 13); ctx.fillStyle = '#E07A3F'; ctx.fill(); text(r.name, lx, ly - 1, 15, '#FFFFFF', 'center', 800); continue; }
+    font(14, 800); ctx.textAlign = 'center'; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(10,28,20,.8)'; ctx.strokeText(r.name, lx, ly); ctx.fillStyle = 'rgba(255,248,236,.92)'; ctx.fillText(r.name, lx, ly); }
+  compass(W - 52, H - 60, 16);
   UI.push({ hit: (x, y) => y > 100 && y < 500 && !!regionAt(x, y), fn: () => { const r = regionAt(mouse.x, mouse.y); if (!r) return; G.region = r.id; G.regionCorrect = r.id === G.mission.region; G.screen = 'region'; } });
   if (hovR) hovering = true;
   rrect(24, 14, W - 48, 84, 12); ctx.fillStyle = 'rgba(6,20,28,.82)'; ctx.fill();
@@ -2762,7 +3205,11 @@ function drawMap() {
 }
 function drawRegion() {
   ctx.imageSmoothingEnabled = false; ctx.drawImage(regionMapImage(G.region || 'kalimantan'), 0, 0, W, H); ctx.imageSmoothingEnabled = true;
+  drawRegionLife(G.region || 'kalimantan', G.time, G.lastDt || 1 / 60);
+  // soft vignette so the map feels like a view from above
+  { const vg = ctx.createRadialGradient(W * .36, H * .55, H * .35, W * .36, H * .55, W * .78); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,8,6,.38)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H); }
   ctx.font = 'italic 500 12px ' + FONT; ctx.fillStyle = 'rgba(150,200,220,.6)'; ctx.textAlign = 'center'; const ML = MAPLABELS[G.region] || MAPLABELS.kalimantan; ctx.fillText('Laut', ML.laut[0], ML.laut[1]);
+  { const V = (REGEXTRA[G.region] || {}).volcano; if (V) { font(11, 700); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,.8)'; ctx.textAlign = 'center'; ctx.strokeText('Gunung', V[0] * CELL, (V[1] + 8) * CELL); ctx.fillStyle = '#F2E4CC'; ctx.fillText('Gunung', V[0] * CELL, (V[1] + 8) * CELL); } }
   ctx.fillStyle = 'rgba(190,230,240,.7)'; if (ML.sungai) ctx.fillText('Sungai', ML.sungai[0], ML.sungai[1]);
   font(11, 700); ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,.8)'; for (const v of ML.desa) { ctx.strokeText('Desa', v[0], v[1]); ctx.fillStyle = '#FFE8CC'; ctx.fillText('Desa', v[0], v[1]); }
   // travel trail
@@ -2773,10 +3220,10 @@ function drawRegion() {
   let hov = null;
   for (const sp of regionSpots()) if (Math.hypot(mouse.x - sp.pin.x, mouse.y - sp.pin.y) < 26) hov = sp;
   const shown = hov || G.selSpot;
-  for (const sp of regionSpots()) {
-    const p = sp.pin, on = sp === hov, sel = sp === G.selSpot;
+  regionSpots().forEach((sp, si) => {
+    const on = sp === hov, sel = sp === G.selSpot, p = { x: sp.pin.x, y: sp.pin.y - (on || sel ? 3 : 0) + Math.sin(G.time * 2 + si * 1.7) * 1.5 };
     if (sel) { const pr = (G.time * .9) % 1; ctx.strokeStyle = 'rgba(255,226,140,' + (0.8 * (1 - pr)) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 20 + pr * 16, 0, PI2); ctx.stroke(); }
-    ell(p.x, p.y + 16, 16, 5, 'rgba(0,0,0,.3)');
+    ell(sp.pin.x, sp.pin.y + 16, 16, 5, 'rgba(0,0,0,.3)');
     ctx.beginPath(); ctx.arc(p.x, p.y, on || sel ? 21 : 18, 0, PI2); ctx.fillStyle = sel ? '#FFE3A6' : on ? '#FFFFFF' : '#F2E8D5'; ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = sel ? '#E07A3F' : 'rgba(30,40,30,.55)'; ctx.stroke();
     ctx.save(); ctx.translate(p.x, p.y + 1); SPOTICON[sp.icon || sp.id](); ctx.restore();
@@ -2786,8 +3233,8 @@ function drawRegion() {
     if (G.reported[sp.id]) { ctx.beginPath(); ctx.arc(p.x - 18, p.y - 16, 10, 0, PI2); ctx.fillStyle = '#7FD08E'; ctx.fill(); text('✓', p.x - 18, p.y - 11.5, 12, '#14401C', 'center', 900); }
     const days = G.visitLog.filter(v => v.id === sp.id).map(v => 'H' + v.day);
     if (days.length) { const tx = days.join(' '); font(11, 700); const tw = ctx.measureText(tx).width + 12; rrect(p.x - tw / 2, p.y + 52, tw, 18, 9); ctx.fillStyle = 'rgba(255,240,210,.9)'; ctx.fill(); text(tx, p.x, p.y + 65, 11, '#4A3418', 'center', 700); }
-    UI.push({ hit: (x, y) => Math.hypot(x - p.x, y - p.y) < 26, fn: () => { if (G.selSpot === sp) startSession(sp); else G.selSpot = sp; } });
-  }
+    UI.push({ hit: (x, y) => Math.hypot(x - sp.pin.x, y - sp.pin.y) < 26, fn: () => { if (G.selSpot === sp) startSession(sp); else G.selSpot = sp; } });
+  });
   if (hov) hovering = true;
   // header
   rrect(16, 14, W - 32, 62, 12); ctx.fillStyle = 'rgba(12,24,18,.82)'; ctx.fill();
@@ -2807,6 +3254,11 @@ function drawRegion() {
     ctx.beginPath(); ctx.arc(px + 28, y - 5, 9, 0, PI2); ctx.fillStyle = '#FFD34D'; ctx.fill(); text('↑', px + 28, y - 1, 12, '#3A2A00', 'center', 900); text('Petunjuk mengarah ke sini', px + 46, y, 13, '#E6EDE7', 'left', 500); y += 26;
     ctx.beginPath(); ctx.arc(px + 28, y - 5, 9, 0, PI2); ctx.fillStyle = '#7FD08E'; ctx.fill(); text('✓', px + 28, y - 1, 11, '#14401C', 'center', 900); text('Ancaman sudah dilaporkan', px + 46, y, 13, '#E6EDE7', 'left', 500); y += 26;
     rrect(px + 16, y - 15, 28, 16, 8); ctx.fillStyle = 'rgba(255,240,210,.9)'; ctx.fill(); text('H1', px + 30, y - 3, 10, '#4A3418', 'center', 700); text('Hari kamu pernah ke sini', px + 52, y, 13, '#E6EDE7', 'left', 500);
+    y += 18; ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(px + 18, y, pw - 36, 1); y += 24;
+    text('Tentang ' + regionName(), px + 18, y, 13, '#FFE2C7', 'left', 700);
+    y = wrapText(ISLANDINFO[G.region] || '', px + 18, y + 20, pw - 36, 17, 12.5, '#B9CBBE', 400); y += 22;
+    text('Legenda', px + 18, y, 13, '#FFE2C7', 'left', 700); y += 10;
+    regionLegend(G.region).forEach((it, i) => { const lx = px + 18 + (i % 2) * 116, ly = y + 6 + Math.floor(i / 2) * 20; rrect(lx, ly, 14, 14, 3); ctx.fillStyle = it[0]; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.stroke(); text(it[1], lx + 22, ly + 12, 12.5, '#E6EDE7', 'left', 500); });
     return;
   }
   drawSpotPreview(shown, px + 14, py + 14, pw - 28, 132);
@@ -2896,7 +3348,7 @@ function drawArchive() {
 // Pressing Mulai closes the bush, switches the screen while it's covered, and parts it again.
 // BUSH.p: 0 = fully covered, 1 = fully open. bushGo(fn) closes, runs fn, then opens.
 // boot: the first opening waits until the menu art is built and frames are steady, so it never jumps.
-const BUSH = { p: 0, dir: 0, hold: 0.3, dur: 1.6, then: null, items: null, spr: null, leaves: [], pulled: false, boot: true, okF: 0, bootT: 0, warmed: false };
+const BUSH = { p: 0, dir: 0, hold: 0.4, dur: 2.8, then: null, items: null, spr: null, leaves: [], pulled: false, boot: true, okF: 0, bootT: 0, warmed: false };
 // same forest greens as the trees in the game (meranti, beringin, bakau), darker toward the back
 const BUSH_PAL = ['#0C2014', '#12301D', '#1A4226', '#245530', '#2F6A3A', '#3D8044'];
 const BUSH_ACC = ['#5E7234', '#7A5A36']; // a few young / dry leaves, muted so they don't pull the eye
@@ -3040,7 +3492,7 @@ function drawBush(dt) {
     if (!BUSH.pulled && BUSH.p > .35) { BUSH.pulled = true; spawnBushLeaves(); }
     if (BUSH.p >= 1) { BUSH.dir = 0; if (!BUSH.warmed) { BUSH.warmed = true; warmLayouts(); } }
   } else if (BUSH.dir === -1) {
-    BUSH.p = Math.max(0, BUSH.p - dt / 0.55);
+    BUSH.p = Math.max(0, BUSH.p - dt / 0.85);
     if (BUSH.p <= 0) { BUSH.dir = 0; BUSH.hold = 0.12; if (BUSH.then) { BUSH.then(); BUSH.then = null; fade = 0; } }
   }
   if (BUSH.p < 1) {
@@ -3084,7 +3536,7 @@ function drawBush(dt) {
 function spawnBushLeaves() {
   if (typeof hiss === 'function') { hiss(-.6); hiss(.6); }
   const R = Math.random;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 6; i++) {
     const zone = i % 3; let x, y;
     if (zone === 0) { x = -20 + R() * (W + 40); y = -40 + R() * H * .3; }       // across the top
     else { x = zone === 1 ? -20 + R() * W * .26 : W * .74 + R() * W * .26; y = -30 + R() * H * .75; } // down the left and right
@@ -3099,7 +3551,7 @@ function spawnBushLeaves() {
 // ===== Loop =====
 let lastTs = 0, prevScreen = '', fade = 0;
 function frame(ts) {
-  const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0); lastTs = ts; G.time += dt;
+  const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0); lastTs = ts; G.time += dt; G.lastDt = dt;
   ctx.setTransform(S, 0, 0, S, 0, 0);
   UI = []; hovering = false;
   if (G.screen === 'session') { updSession(dt); if (G.screen === 'session') drawSession(); }
