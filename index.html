@@ -2579,16 +2579,29 @@ const MENU_SCENES = [
 const MENU_DUR = 24, MENU_FADE = 3.2, MENU_SLOW = .6;
 let MSNAP = null;
 // Bekantan for the menu: comes out of the foliage at the limb tip, walks in, sits and eats, now and then faces the camera.
-function mkMenuBekantan(L) {
-  const x0 = 905, xs = 742; const e = ent({ type: 'bekantan', kind: 'target', alpha: 0, f: -1, x: x0, y: branchY(L, x0) });
+function mkMenuBekantan(L, xs) {
+  const x0 = xs + 165; const e = ent({ type: 'bekantan', kind: 'target', alpha: 0, f: -1, x: x0, y: branchY(L, x0) });
   e.upd = dt => { const k = Math.min(1, e.t / 4); e.x = lerp(x0, xs, 1 - (1 - k) * (1 - k)); e.y = branchY(L, e.x); e.alpha = Math.min(1, e.t / .7); };
   e.flee = () => {}; e.moment = () => false; e.c = () => ({ x: e.x, y: e.y - 34 });
   e.draw = () => drawBekantan(e.x, e.y, -1, e.t < 4 ? 'walk' : 'sit', e.t > 4 && (e.t % 6) > 3.6, e.t);
   return e;
 }
 // Menu animals come in on the right half of the screen (the left half holds the title).
-function menuPlace(e, L) {
-  const C = L.canopy[1], px = C.x + 85 * C.sc + rnd(-14, 14), py = branchY(L, px);
+// Perched animals pick a random spot along the second tree's branch, away from the ones already sitting there.
+const MENU_PERCHED = ['bekantan', 'pekakak', 'rangkong', 'kakatua', 'cendrawasih'];
+function menuSpot(L, others) {
+  const C = L.canopy[1], a = C.x - 90 * C.sc, b = W - 70, taken = others.filter(o => o.menuX != null).map(o => o.menuX);
+  let best = null, bestD = -1;
+  for (let i = 0; i < 40; i++) {
+    const x = rnd(a, b); if (Math.abs(x - C.x) < 45 * C.sc) continue; // stay on the limbs, not on top of the trunk
+    const d = taken.length ? Math.min(...taken.map(t => Math.abs(t - x))) : 1e9;
+    if (d >= 120) return x;
+    if (d > bestD) { bestD = d; best = x; }
+  }
+  return best;
+}
+function menuPlace(e, L, px) {
+  const py = px != null ? branchY(L, px) : 0;
   if (e.type === 'kuntul') e.x = rnd(620, 760);
   else if (e.type === 'kepiting' || e.type === 'tembakul' || e.type === 'penyu') e.x = rnd(600, 800);
   else if (e.type === 'biawak') { e.f = -1; e.x = W + 80; }
@@ -2597,11 +2610,14 @@ function menuPlace(e, L) {
   else if (e.type === 'rangkong' || e.type === 'kakatua' || e.type === 'cendrawasih') { e.px = px; e.py = py; e.sx = px + 280; e.sy = py - 130; e.x = e.sx; e.y = e.sy; e.f = -1; }
   return e;
 }
-function menuSpawn(k, L) { const e = k === 'bekantan' ? mkMenuBekantan(L) : (TARGETMK[k] || MAKERS[k])(L); menuPlace(e, L); scaled(e); e.t = 0; return e; }
+function menuSpawn(k, L, others) {
+  const px = MENU_PERCHED.indexOf(k) >= 0 ? menuSpot(L, others) : null;
+  const e = k === 'bekantan' ? mkMenuBekantan(L, px) : (TARGETMK[k] || MAKERS[k])(L); menuPlace(e, L, px); e.menuX = px; scaled(e); e.t = 0; return e;
+}
 function menuScene(dt) {
   const M = G.menu || (G.menu = { i: 0, t: 0, ents: [], fade: 0, done: {} });
   M.t += dt; const S0 = MENU_SCENES[M.i], L = LAYOUTS[S0.layout];
-  for (const [k, at] of S0.spawn) if (!M.done[k] && M.t >= at * 1.8) { M.done[k] = 1; try { M.ents.push(menuSpawn(k, L)); } catch (er) {} }
+  for (const [k, at] of S0.spawn) if (!M.done[k] && M.t >= at * 1.8) { M.done[k] = 1; try { M.ents.push(menuSpawn(k, L, M.ents)); } catch (er) {} }
   for (const e of M.ents) { e.t += dt * MENU_SLOW; try { e.upd(dt * MENU_SLOW); } catch (er) { e.dead = true; } }
   M.ents = M.ents.filter(e => !e.dead && toScreenX(e.x) > -300 && toScreenX(e.x) < W + 300);
   if (M.t > 4) { try { getLayers(LAYOUTS[MENU_SCENES[(M.i + 1) % MENU_SCENES.length].layout]); } catch (er) {} }
@@ -2622,9 +2638,6 @@ function drawMenu0() {
     menuIcon('camera', bx + 22, by + 23, d ? '#FFD2B0' : 'rgba(255,255,255,.7)'); text(n1, bx + 42, by + 20, 13, '#FFF4E0', 'left', 700); text(sp.latin, bx + 42, by + 36, 11, '#B9CBBE', 'left', 500); ctx.globalAlpha = 1; }
   const g = ctx.createLinearGradient(0, 0, 600, 0); g.addColorStop(0, 'rgba(12,20,14,.82)'); g.addColorStop(.7, 'rgba(12,20,14,.45)'); g.addColorStop(1, 'rgba(12,20,14,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, 600, H);
   const t = G.time;
-  // event chip
-  font(11.5, 700); const chip = 'GAME JAM IT RUSH 2026', cw = ctx.measureText(chip).width + 26; rrect(58, 70, cw, 24, 12); ctx.fillStyle = 'rgba(224,122,63,.18)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,176,143,.55)'; ctx.lineWidth = 1; ctx.stroke();
-  ellG(70, 82, 3, 3, 0, '#FFB08F'); text(chip, 78, 86.5, 11.5, '#FFC8A8', 'left', 700);
   // viewfinder around the title
   const fx = 44, fy = 108, fw = 432, fh = 186, cl = 22, br = .75 + .25 * Math.sin(t * 2);
   ctx.strokeStyle = 'rgba(255,244,224,' + (.7 * br + .2) + ')'; ctx.lineWidth = 2.4; ctx.lineCap = 'square';
@@ -2882,8 +2895,11 @@ function drawArchive() {
 // open in the middle, then pulls wide into an uneven oval until the screen is clear.
 // Pressing Mulai closes the bush, switches the screen while it's covered, and parts it again.
 // BUSH.p: 0 = fully covered, 1 = fully open. bushGo(fn) closes, runs fn, then opens.
-const BUSH = { p: 0, dir: 0, hold: 0.25, dur: 1.0, then: null, items: null, spr: null, leaves: [], pulled: false };
-const BUSH_PAL = ['#12331C', '#1C4626', '#295D2F', '#3B7839', '#559548', '#73AE58', '#92C46A'];
+// boot: the first opening waits until the menu art is built and frames are steady, so it never jumps.
+const BUSH = { p: 0, dir: 0, hold: 0.3, dur: 1.6, then: null, items: null, spr: null, leaves: [], pulled: false, boot: true, okF: 0, bootT: 0, warmed: false };
+// same forest greens as the trees in the game (meranti, beringin, bakau), darker toward the back
+const BUSH_PAL = ['#0C2014', '#12301D', '#1A4226', '#245530', '#2F6A3A', '#3D8044'];
+const BUSH_ACC = ['#5E7234', '#7A5A36']; // a few young / dry leaves, muted so they don't pull the eye
 function bushGo(fn) { if (bushBusy()) return; BUSH.dir = -1; BUSH.then = fn; if (typeof hiss === 'function') hiss(0); }
 function bushBusy() { return BUSH.dir !== 0 || BUSH.hold > 0 || BUSH.p < 1; }
 
@@ -2950,7 +2966,12 @@ const BL = (() => {
     poly(pts, col); for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; poly([[x, y], p, q], shade(col, lit((p[0] + q[0]) / 2 - x, (p[1] + q[1]) / 2 - y) * .1)); }
   }
   // kind -> [length, half height of its box, draw(x, y, col, R)]; every leaf points along +x from its base
+  // a clump of foliage made the same way as the tree crowns in the game (faceted leafBlobs)
+  function clump(x, y, L, h, c, R) {
+    for (let i = 0; i < 6; i++) { const t = i / 5; leafBlob(x + 12 + t * (L - 30) + (R() - .5) * 8, y + (R() - .5) * h * .5 + Math.sin(Math.PI * t) * -h * .18, h * (.42 + R() * .16), [shade(c, -.1), c, shade(c, .2)], R); }
+  }
   const KINDS = {
+    clump: [84, 40, (x, y, c, R) => clump(x, y, 84, 40, c, R)],
     lance: [40, 14, (x, y, c, R) => lance(x, y, 0, 40, 12, c, R)],
     heart: [56, 32, (x, y, c, R) => heart(x, y, 0, 56, 31, c, R)],
     fern: [78, 30, (x, y, c, R) => fern(x, y, 0, 76, c, R)],
@@ -2964,7 +2985,9 @@ function buildBushSprites() {
   for (const k in BL.KINDS) {
     const [L, hh, fn] = BL.KINDS[k]; spr[k] = [];
     for (let lv = 0; lv < 4; lv++) for (let v = 0; v < 3; v++) {
-      const R = mulberry(500 + lv * 31 + v * 7 + k.length * 101), col = BUSH_PAL[2 + lv], w = L + pad * 2 + 16, h = hh * 2 + pad * 2;
+      const R = mulberry(500 + lv * 31 + v * 7 + k.length * 101), w = L + pad * 2 + 16, h = hh * 2 + pad * 2;
+      // front leaves sometimes young or dry (warm), the rest forest green
+      const col = lv === 3 && v === 2 && (k === 'heart' || k === 'lance') ? BUSH_ACC[k.length % 2] : BUSH_PAL[2 + lv];
       // draw the leaf flat first, then stamp it once with a shadow (a shadow on every facet is very slow)
       const flat = mkLayer(w, h, () => fn(pad + 4, h / 2, shade(col, (R() - .5) * .08), R));
       const c = mkLayer(w, h, () => { ctx.shadowColor = 'rgba(4,14,6,.45)'; ctx.shadowBlur = 4 * S; ctx.shadowOffsetY = 2 * S; ctx.drawImage(flat, 0, 0, w, h); });
@@ -2974,11 +2997,14 @@ function buildBushSprites() {
   return spr;
 }
 function buildBush() {
-  const R = mulberry(4242), items = [], kinds = ['lance', 'lance', 'lance', 'heart', 'heart', 'fern', 'fern', 'banana', 'palm'];
-  // many small leaves, brighter toward the front (a dark fill underneath covers any gaps)
-  for (let gy = -30; gy <= H + 30; gy += 25) for (let gx = -30; gx <= W + 30; gx += 30) {
-    const d = R(), k = kinds[Math.floor(R() * kinds.length)];
-    items.push({ k, v: Math.min(3, Math.floor(d * 4)) * 3 + Math.floor(R() * 3), x: gx + (R() - .5) * 28, y: gy + (R() - .5) * 22, a: R() * 6.28, s: .8 + R() * .4, d, ph: R() * 6.28 });
+  const R = mulberry(4242), items = [];
+  // back: low-poly foliage clumps like the tree crowns; front: big leaves of the forest floor
+  // (pisang, nipah, pakis, keladi). Fewer, bigger shapes, so it reads like the game and not like wallpaper.
+  const back = ['clump', 'clump', 'clump', 'fern'], front = ['banana', 'palm', 'heart', 'heart', 'fern', 'lance', 'clump'];
+  for (let gy = -36; gy <= H + 36; gy += 36) for (let gx = -40; gx <= W + 40; gx += 44) {
+    const d = R(), fr = d > .5, k = (fr ? front : back)[Math.floor(R() * (fr ? front : back).length)];
+    let v = Math.min(3, Math.floor(d * 4)) * 3 + Math.floor(R() * 3); if (v === 11 && R() < .7) v = 10; // warm leaves only here and there
+    items.push({ k, v, x: gx + (R() - .5) * 36, y: gy + (R() - .5) * 28, a: R() * 6.28, s: (k === 'clump' ? 1.05 : .95) + R() * .45, d, ph: R() * 6.28 });
   }
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.sp = BUSH.spr[it.k][it.v];
@@ -2990,19 +3016,35 @@ function buildBush() {
 const BUSH_K = 4, BUSH_A = 1300 / (Math.exp(BUSH_K) - 1);
 function bushHole(p) { const e = 1 - Math.pow(1 - p, 1.5); return [BUSH_A * (Math.exp(BUSH_K * e) - 1), .5 + e * .45]; }
 const holeWobble = th => 1 + .16 * Math.sin(th * 3 + 1.3) + .08 * Math.sin(th * 7 + .4); // uneven edge, like hands
+const easeIO = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+// Build every layout's art only after the opening, a little at a time, so the menu stays smooth.
+function warmLayouts() {
+  const ks = Object.keys(LAYOUTS); let i = 0;
+  const idle = window.requestIdleCallback || (f => setTimeout(f, 80));
+  const step = () => { if (i >= ks.length) return; if (bushBusy()) { setTimeout(step, 200); return; } try { getLayers(LAYOUTS[ks[i]]); } catch (er) {} i++; idle(step); };
+  idle(step);
+}
 function drawBush(dt) {
+  if (!BUSH.spr) { BUSH.spr = buildBushSprites(); BUSH.items = buildBush(); }
+  if (BUSH.boot) {
+    // hold the cover until a few steady frames in a row (all first-time drawing is done)
+    const now = performance.now(), real = BUSH.last ? (now - BUSH.last) / 1000 : 1; BUSH.last = now; // dt is capped by the loop, so measure real time
+    BUSH.bootT += real; BUSH.okF = real < .07 ? BUSH.okF + 1 : 0;
+    if (BUSH.okF >= 6 || BUSH.bootT > 3) BUSH.boot = false;
+    dt = 0;
+  }
+  dt = Math.min(dt, 1 / 30); // a slow frame slows the motion down instead of skipping it
   if (BUSH.hold > 0) { BUSH.hold -= dt; if (BUSH.hold <= 0) { BUSH.hold = 0; BUSH.dir = 1; BUSH.pulled = false; if (typeof hiss === 'function') hiss(0); } }
   else if (BUSH.dir === 1) {
     BUSH.p = Math.min(1, BUSH.p + dt / BUSH.dur);
     if (!BUSH.pulled && BUSH.p > .35) { BUSH.pulled = true; spawnBushLeaves(); }
-    if (BUSH.p >= 1) BUSH.dir = 0;
+    if (BUSH.p >= 1) { BUSH.dir = 0; if (!BUSH.warmed) { BUSH.warmed = true; warmLayouts(); } }
   } else if (BUSH.dir === -1) {
-    BUSH.p = Math.max(0, BUSH.p - dt / 0.5);
+    BUSH.p = Math.max(0, BUSH.p - dt / 0.55);
     if (BUSH.p <= 0) { BUSH.dir = 0; BUSH.hold = 0.12; if (BUSH.then) { BUSH.then(); BUSH.then = null; fade = 0; } }
   }
-  if (!BUSH.spr) { BUSH.spr = buildBushSprites(); BUSH.items = buildBush(); }
   if (BUSH.p < 1) {
-    const [o, ex] = bushHole(BUSH.p), cx = W / 2, cy = H / 2 + 6, t = G.time;
+    const [o, ex] = bushHole(easeIO(BUSH.p)), cx = W / 2, cy = H / 2 + 6, t = G.time;
     // dark leaf shadow behind everything, with the hole cut out of it
     ctx.beginPath(); ctx.rect(0, 0, W, H);
     if (o > .5) for (let i = 0; i <= 48; i++) { const th = i / 48 * Math.PI * 2, rr = o * holeWobble(th) + 22; const px = cx + Math.cos(th) * rr * ex, py = cy + Math.sin(th) * rr; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
@@ -3042,15 +3084,16 @@ function drawBush(dt) {
 function spawnBushLeaves() {
   if (typeof hiss === 'function') { hiss(-.6); hiss(.6); }
   const R = Math.random;
-  for (let i = 0; i < 36; i++) {
+  for (let i = 0; i < 20; i++) {
     const zone = i % 3; let x, y;
     if (zone === 0) { x = -20 + R() * (W + 40); y = -40 + R() * H * .3; }       // across the top
     else { x = zone === 1 ? -20 + R() * W * .26 : W * .74 + R() * W * .26; y = -30 + R() * H * .75; } // down the left and right
     const heart = R() < .3;
-    BUSH.leaves.push({ k: heart ? 'heart' : 'lance', v: Math.floor(R() * 12), s: heart ? .38 + R() * .2 : .55 + R() * .4,
+    BUSH.leaves.push({ k: heart ? 'heart' : 'lance', v: 6 + Math.floor(R() * 6), s: heart ? .38 + R() * .2 : .55 + R() * .4,
       x0: x, x, y, vy: 10 + R() * 30, vmax: 55 + R() * 65, drift: Math.sign(x - W / 2) * (8 + R() * 30),
       amp: 14 + R() * 28, f: 2 + R() * 1.8, ph: R() * 6.28, r0: R() * 6.28, r: 0, spin: (R() - .5) * 1.2,
       t: -R() * .8, life: 1.7 + R() * 1.1 });
+    if (BUSH.leaves[BUSH.leaves.length - 1].v === 11) BUSH.leaves[BUSH.leaves.length - 1].v = 10;
   }
 }
 // ===== Loop =====
@@ -3076,7 +3119,7 @@ function frame(ts) {
 }
 window.__G = G; window.__SS = () => SS; // debug hooks
 requestAnimationFrame(frame);
-setTimeout(() => { for (const k in LAYOUTS) getLayers(LAYOUTS[k]); }, 300);
+// (the other layouts are built after the opening: see warmLayouts)
 </script>
 </body>
 </html>
