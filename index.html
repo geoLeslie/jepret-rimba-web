@@ -68,6 +68,7 @@ cv.addEventListener('touchend', e => { e.preventDefault(); onPress(); }, { passi
 addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); ensureAudio(); if (G.screen === 'session') shoot(); } });
 function onPress() {
   ensureAudio();
+  if (typeof bushBusy === 'function' && bushBusy()) return;
   if (G.screen === 'session') { shoot(); return; }
   for (let i = UI.length - 1; i >= 0; i--) {
     const u = UI[i]; const hit = u.hit ? u.hit(mouse.x, mouse.y) : inRect(mouse.x, mouse.y, u);
@@ -2643,7 +2644,7 @@ function drawMenu0() {
   text('Satu jepretan untuk menjaga hutan', 62, 326, 17, '#E4EEE6', 'left', 500);
   text('dan pesisir Indonesia.', 62, 349, 17, '#E4EEE6', 'left', 500);
   // buttons
-  button(60, 372, 400, 52, 'Mulai Ekspedisi', () => { G.screen = 'missions'; }, { primary: true, size: 19 });
+  button(60, 372, 400, 52, 'Mulai Ekspedisi', () => bushGo(() => { G.screen = 'missions'; }), { primary: true, size: 19 });
   menuIcon('camera', 60 + 200 - 98, 398, '#FFFFFF');
   const found = DEXORDER.filter(k => DEX[k]).length;
   button(60, 434, 194, 44, 'Cara Main', () => { G.howto = true; }, { size: 16 }); menuIcon('help', 60 + 97 - 58, 456, '#1E2B22');
@@ -2875,6 +2876,183 @@ function drawArchive() {
   button(244, 470, 160, 44, 'Menu utama', () => { G.screen = 'menu'; });
 }
 
+// ===== Bush transition (start screen) =====
+// The game opens behind a wall of jungle bush (Semak Campuran: small pisang, keladi, pakis,
+// nipah and pointed leaves). It parts like two hands pushing into it: a small hole pokes
+// open in the middle, then pulls wide into an uneven oval until the screen is clear.
+// Pressing Mulai closes the bush, switches the screen while it's covered, and parts it again.
+// BUSH.p: 0 = fully covered, 1 = fully open. bushGo(fn) closes, runs fn, then opens.
+const BUSH = { p: 0, dir: 0, hold: 0.25, dur: 1.0, then: null, items: null, spr: null, leaves: [], pulled: false };
+const BUSH_PAL = ['#12331C', '#1C4626', '#295D2F', '#3B7839', '#559548', '#73AE58', '#92C46A'];
+function bushGo(fn) { if (bushBusy()) return; BUSH.dir = -1; BUSH.then = fn; if (typeof hiss === 'function') hiss(0); }
+function bushBusy() { return BUSH.dir !== 0 || BUSH.hold > 0 || BUSH.p < 1; }
+
+// --- leaf drawing (local helpers, drawn once into sprites) ---
+const BL = (() => {
+  const P2 = Math.PI * 2;
+  function poly(P, col) { ctx.beginPath(); P.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); }
+  function line(a, b, col, w) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.stroke(); }
+  const lit = (nx, ny) => -(nx * .62 + ny * .78) / (Math.hypot(nx, ny) || 1); // light from the upper left
+  const xf = (x, y, a) => { const c = Math.cos(a), s = Math.sin(a); return p => [x + p[0] * c - p[1] * s, y + p[0] * s + p[1] * c]; };
+  // a leaf from its outline, each half cut into flat facets like the low-poly trees
+  function facetLeaf(x, y, ang, up, lo, col, ribW) {
+    const T = xf(x, y, ang);
+    for (const [E, sg] of [[up, -1], [lo, 1]]) {
+      const base = lit(-Math.sin(ang) * sg, Math.cos(ang) * sg) * .16;
+      for (let i = 0; i < E.length - 1; i++) {
+        const m0 = T([Math.max(0, E[i][0]), 0]), m1 = T([Math.max(0, E[i + 1][0]), 0]), e0 = T(E[i]), e1 = T(E[i + 1]);
+        poly([m0, e0, e1, m1], shade(col, base + (i % 2 ? .035 : -.02)));
+        poly([m0, e0, [(e0[0] + m1[0]) / 2, (e0[1] + m1[1]) / 2]], shade(col, base - .05));
+      }
+    }
+    if (ribW) line(T([0, 0]), T([up[up.length - 1][0] * .9, 0]), shade(col, .2), ribW);
+  }
+  function lance(x, y, ang, L, w, col, R) {
+    const xs = [0, .14, .36, .6, .82, 1], pr = [0, .72, 1, .86, .46, 0];
+    facetLeaf(x, y, ang, xs.map((t, i) => [t * L, -pr[i] * w * (1 + (R() - .5) * .14)]), xs.map((t, i) => [t * L, pr[i] * w * (1 + (R() - .5) * .14)]), col, Math.max(.6, w * .07));
+  }
+  function heart(x, y, ang, L, w, col, R) {
+    const P = [[.08, 0], [-.16, -.52], [-.04, -.9], [.26, -1], [.56, -.76], [.83, -.36], [1, 0]], T = xf(x, y, ang);
+    facetLeaf(x, y, ang, P.map(p => [p[0] * L, p[1] * w]), P.map(p => [p[0] * L, -p[1] * w * (.92 + R() * .12)]), col, Math.max(.6, L * .02));
+    for (let i = 1; i <= 3; i++) for (const sg of [-1, 1]) line(T([L * (.12 + i * .17), 0]), T([L * (.3 + i * .2), sg * w * (.78 - i * .14)]), shade(col, .14), .7);
+  }
+  function frond(x, y, ang, L, bend, n) { const P = []; let px = x, py = y, a = ang; for (let k = 0; k <= n; k++) { P.push([px, py, a, k / n]); a += bend / n; px += Math.cos(a) * L / n; py += Math.sin(a) * L / n; } return P; }
+  function stroke(P, col, w) { ctx.beginPath(); P.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.stroke(); }
+  function fern(x, y, ang, L, col, R) {
+    const P = frond(x, y, ang, L, (R() - .5) * .8, 12); stroke(P, shade(col, -.15), 1.4);
+    for (let k = 1; k < P.length; k++) { const [px, py, a, t] = P[k], ll = L * .22 * (1 - t * .7); for (const sg of [-1, 1]) lance(px, py, a + sg * (1.05 - t * .3), ll, ll * .3, shade(col, (R() - .5) * .06), R); }
+  }
+  function palm(x, y, ang, L, col, R) {
+    const P = frond(x, y, ang, L, (R() - .5) * .6, 16);
+    for (let k = 1; k < P.length; k++) {
+      const [px, py, a, t] = P[k], ll = L * .34 * (Math.sin(Math.PI * Math.min(1, t * 1.1)) * .75 + .25), w = Math.max(1.5, ll * .08);
+      for (const sg of [-1, 1]) {
+        const la = a + sg * (.5 + t * .35), T = xf(px, py, la), d = ll * .12;
+        const A = T([0, 0]), B = T([ll * .5, -w + d * .3]), C = T([ll, d]), D = T([ll * .5, w + d * .3]), M = T([ll * .5, d * .3]);
+        poly([A, B, C, M], shade(col, .06)); poly([A, M, C, D], shade(col, -.08));
+      }
+    }
+    stroke(P, shade(col, .12), 1.6);
+  }
+  function banana(x, y, ang, L, w, col, R) {
+    const T = xf(x, y, ang), n = 10, prof = t => w * Math.pow(Math.sin(Math.PI * Math.min(1, t * .92 + .08)), .55);
+    for (const sg of [-1, 1]) {
+      const tone = lit(-Math.sin(ang) * sg, Math.cos(ang) * sg) * .14;
+      for (let i = 0; i < n; i++) {
+        const t0 = i / n, t1 = (i + 1) / n - .008, f = R() < .28 ? .5 + R() * .3 : 1, sl = L * .05;
+        poly([T([t0 * L, 0]), T([t0 * L + sl, sg * prof(t0) * f]), T([t1 * L + sl, sg * prof(t1) * f]), T([t1 * L, 0])], shade(col, tone + (i % 2 ? .03 : -.02)));
+      }
+    }
+    line(T([0, 0]), T([L * .95, 0]), shade(col, .22), Math.max(.8, w * .09));
+  }
+  function blob(x, y, r, col) {
+    const n = 8, pts = []; for (let i = 0; i < n; i++) { const a = i / n * P2 + .35; pts.push([x + Math.cos(a) * r, y + Math.sin(a) * r * .82]); }
+    poly(pts, col); for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; poly([[x, y], p, q], shade(col, lit((p[0] + q[0]) / 2 - x, (p[1] + q[1]) / 2 - y) * .1)); }
+  }
+  // kind -> [length, half height of its box, draw(x, y, col, R)]; every leaf points along +x from its base
+  const KINDS = {
+    lance: [40, 14, (x, y, c, R) => lance(x, y, 0, 40, 12, c, R)],
+    heart: [56, 32, (x, y, c, R) => heart(x, y, 0, 56, 31, c, R)],
+    fern: [78, 30, (x, y, c, R) => fern(x, y, 0, 76, c, R)],
+    banana: [96, 26, (x, y, c, R) => banana(x, y, 0, 92, 21, c, R)],
+    palm: [92, 40, (x, y, c, R) => palm(x, y, 0, 88, c, R)]
+  };
+  return { KINDS, blob };
+})();
+function buildBushSprites() {
+  const spr = {}, pad = 10;
+  for (const k in BL.KINDS) {
+    const [L, hh, fn] = BL.KINDS[k]; spr[k] = [];
+    for (let lv = 0; lv < 4; lv++) for (let v = 0; v < 3; v++) {
+      const R = mulberry(500 + lv * 31 + v * 7 + k.length * 101), col = BUSH_PAL[2 + lv], w = L + pad * 2 + 16, h = hh * 2 + pad * 2;
+      // draw the leaf flat first, then stamp it once with a shadow (a shadow on every facet is very slow)
+      const flat = mkLayer(w, h, () => fn(pad + 4, h / 2, shade(col, (R() - .5) * .08), R));
+      const c = mkLayer(w, h, () => { ctx.shadowColor = 'rgba(4,14,6,.45)'; ctx.shadowBlur = 4 * S; ctx.shadowOffsetY = 2 * S; ctx.drawImage(flat, 0, 0, w, h); });
+      spr[k].push({ c, w, h, ox: pad + 4, oy: h / 2 });
+    }
+  }
+  return spr;
+}
+function buildBush() {
+  const R = mulberry(4242), items = [], kinds = ['lance', 'lance', 'lance', 'heart', 'heart', 'fern', 'fern', 'banana', 'palm'];
+  // many small leaves, brighter toward the front (a dark fill underneath covers any gaps)
+  for (let gy = -30; gy <= H + 30; gy += 25) for (let gx = -30; gx <= W + 30; gx += 30) {
+    const d = R(), k = kinds[Math.floor(R() * kinds.length)];
+    items.push({ k, v: Math.min(3, Math.floor(d * 4)) * 3 + Math.floor(R() * 3), x: gx + (R() - .5) * 28, y: gy + (R() - .5) * 22, a: R() * 6.28, s: .8 + R() * .4, d, ph: R() * 6.28 });
+  }
+  items.sort((a, b) => a.d - b.d);
+  for (const it of items) it.sp = BUSH.spr[it.k][it.v];
+  return items;
+}
+// The hole in one continuous motion: it grows from nothing at a steady rate (exponential),
+// so the start is gentle and the screen clears quickly, and it slows down at the very end.
+// Returns [size, width/height ratio]: a tall oval that gets rounder as it opens.
+const BUSH_K = 4, BUSH_A = 1300 / (Math.exp(BUSH_K) - 1);
+function bushHole(p) { const e = 1 - Math.pow(1 - p, 1.5); return [BUSH_A * (Math.exp(BUSH_K * e) - 1), .5 + e * .45]; }
+const holeWobble = th => 1 + .16 * Math.sin(th * 3 + 1.3) + .08 * Math.sin(th * 7 + .4); // uneven edge, like hands
+function drawBush(dt) {
+  if (BUSH.hold > 0) { BUSH.hold -= dt; if (BUSH.hold <= 0) { BUSH.hold = 0; BUSH.dir = 1; BUSH.pulled = false; if (typeof hiss === 'function') hiss(0); } }
+  else if (BUSH.dir === 1) {
+    BUSH.p = Math.min(1, BUSH.p + dt / BUSH.dur);
+    if (!BUSH.pulled && BUSH.p > .35) { BUSH.pulled = true; spawnBushLeaves(); }
+    if (BUSH.p >= 1) BUSH.dir = 0;
+  } else if (BUSH.dir === -1) {
+    BUSH.p = Math.max(0, BUSH.p - dt / 0.5);
+    if (BUSH.p <= 0) { BUSH.dir = 0; BUSH.hold = 0.12; if (BUSH.then) { BUSH.then(); BUSH.then = null; fade = 0; } }
+  }
+  if (!BUSH.spr) { BUSH.spr = buildBushSprites(); BUSH.items = buildBush(); }
+  if (BUSH.p < 1) {
+    const [o, ex] = bushHole(BUSH.p), cx = W / 2, cy = H / 2 + 6, t = G.time;
+    // dark leaf shadow behind everything, with the hole cut out of it
+    ctx.beginPath(); ctx.rect(0, 0, W, H);
+    if (o > .5) for (let i = 0; i <= 48; i++) { const th = i / 48 * Math.PI * 2, rr = o * holeWobble(th) + 22; const px = cx + Math.cos(th) * rr * ex, py = cy + Math.sin(th) * rr; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+    ctx.fillStyle = BUSH_PAL[0]; ctx.fill('evenodd');
+    for (const it of BUSH.items) {
+      // push every leaf outward from the centre: a leaf at distance r ends up at sqrt(r^2 + o^2),
+      // so the middle opens first and the edge of the hole stays packed with leaves.
+      const dx = it.x - cx, dy = it.y - cy, nx = dx / ex, r = Math.hypot(nx, dy) || .01;
+      const oo = o * holeWobble(Math.atan2(dy, nx)), r2 = Math.sqrt(r * r + oo * oo), f = r2 / r, push = r2 - r;
+      const x = cx + dx * f, y = cy + dy * f;
+      if (x < -110 || x > W + 110 || y < -110 || y > H + 110) continue;
+      // pushed leaves bend away from the hole and come a little toward the camera
+      let a = it.a;
+      if (push > .5) { let df = Math.atan2(dy, dx) - a; df = Math.atan2(Math.sin(df), Math.cos(df)); a += df * Math.min(1, push / 70) * .85; }
+      a += Math.sin(t * 2.4 + it.ph) * .03;
+      const sc = it.s * (1 + Math.min(.3, push / 700)) * S, c = Math.cos(a) * sc, s = Math.sin(a) * sc, sp = it.sp;
+      ctx.setTransform(c, s, -s, c, x * S, y * S); ctx.drawImage(sp.c, -sp.ox, -sp.oy, sp.w, sp.h);
+    }
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+  }
+  // leaves shaken loose all around the screen, fluttering down as the bush pulls back
+  if (BUSH.leaves.length) {
+    for (const l of BUSH.leaves) {
+      l.t += dt; if (l.t < 0) continue;
+      l.vy = Math.min(l.vmax, l.vy + 90 * dt); l.y += l.vy * dt; l.x0 += l.drift * dt;
+      const w = Math.sin(l.t * l.f + l.ph); l.x = l.x0 + w * l.amp; l.r = l.r0 + w * .9 + l.spin * l.t;
+    }
+    BUSH.leaves = BUSH.leaves.filter(l => l.t < l.life && l.y < H + 40);
+    for (const l of BUSH.leaves) {
+      if (l.t < 0) continue;
+      const sp = BUSH.spr[l.k][l.v], c = Math.cos(l.r) * l.s * S, s = Math.sin(l.r) * l.s * S;
+      ctx.globalAlpha = clamp(Math.min(l.t / .2, (l.life - l.t) / .5), 0, 1); ctx.setTransform(c, s, -s, c, l.x * S, l.y * S); ctx.drawImage(sp.c, -sp.w / 2, -sp.oy, sp.w, sp.h);
+    }
+    ctx.globalAlpha = 1; ctx.setTransform(S, 0, 0, S, 0, 0);
+  }
+}
+function spawnBushLeaves() {
+  if (typeof hiss === 'function') { hiss(-.6); hiss(.6); }
+  const R = Math.random;
+  for (let i = 0; i < 36; i++) {
+    const zone = i % 3; let x, y;
+    if (zone === 0) { x = -20 + R() * (W + 40); y = -40 + R() * H * .3; }       // across the top
+    else { x = zone === 1 ? -20 + R() * W * .26 : W * .74 + R() * W * .26; y = -30 + R() * H * .75; } // down the left and right
+    const heart = R() < .3;
+    BUSH.leaves.push({ k: heart ? 'heart' : 'lance', v: Math.floor(R() * 12), s: heart ? .38 + R() * .2 : .55 + R() * .4,
+      x0: x, x, y, vy: 10 + R() * 30, vmax: 55 + R() * 65, drift: Math.sign(x - W / 2) * (8 + R() * 30),
+      amp: 14 + R() * 28, f: 2 + R() * 1.8, ph: R() * 6.28, r0: R() * 6.28, r: 0, spin: (R() - .5) * 1.2,
+      t: -R() * .8, life: 1.7 + R() * 1.1 });
+  }
+}
 // ===== Loop =====
 let lastTs = 0, prevScreen = '', fade = 0;
 function frame(ts) {
@@ -2892,6 +3070,7 @@ function frame(ts) {
   else if (G.screen === 'dex') drawDex();
   if (G.screen !== prevScreen) { fade = prevScreen ? 0.85 : 1; prevScreen = G.screen; }
   if (fade > 0) { ctx.fillStyle = 'rgba(8,14,10,' + fade + ')'; ctx.fillRect(0, 0, W, H); fade = Math.max(0, fade - dt * 3.2); }
+  drawBush(dt);
   cv.style.cursor = G.screen === 'session' ? 'none' : (hovering ? 'pointer' : 'default');
   requestAnimationFrame(frame);
 }
